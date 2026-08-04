@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>日程管理</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",Arial,sans-serif;
+      background:#f5f5f7;color:#1d1d1f;line-height:1.6;min-height:100vh;
+    }
+    .container{max-width:1200px;margin:0 auto;padding:60px 40px}
+    .header{display:flex;align-items:center;gap:12px;margin-bottom:40px}
+    .header h1{font-size:32px;font-weight:700;color:#1d1d1f}
+    .badge{font-size:12px;padding:4px 10px;border-radius:20px;background:#e0e7ff;color:#4338ca;font-weight:500}
+    .grid{display:grid;grid-template-columns:420px 1fr;gap:40px;align-items:start}
+
+    .card{border-radius:16px;border:1px solid #e5e7eb;background:#fff;padding:28px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+    .input-card{position:sticky;top:20px}
+    .input-card h3{font-size:16px;font-weight:600;margin-bottom:6px}
+    .input-card .hint{font-size:13px;color:#9ca3af;margin-bottom:16px}
+    textarea{width:100%;height:100px;border:2px solid #e5e7eb;border-radius:10px;padding:14px;font-size:14px;font-family:inherit;resize:none;outline:none;transition:border-color .2s,box-shadow .2s}
+    textarea:focus{border-color:#4f46e5;box-shadow:0 0 0 4px rgba(79,70,229,.08)}
+    .input-actions{display:flex;gap:8px;margin-top:14px}
+    .btn{flex:1;padding:12px 0;background:#4f46e5;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:500;cursor:pointer;transition:background .2s,transform .1s}
+    .btn:hover{background:#4338ca}
+    .btn:active{transform:scale(.98)}
+    .btn:disabled{background:#a5b4fc;cursor:not-allowed;transform:none}
+    .preview{margin-top:14px;padding:14px;background:#f0fdf4;border-radius:10px;font-size:13px;color:#166534;display:none}
+    .preview strong{display:block;margin-bottom:4px;color:#065f46}
+
+    .list-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+    .list-header h3{font-size:16px;font-weight:600}
+    .count{font-size:13px;color:#6b7280}
+    .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px}
+    .ftag{padding:6px 16px;border-radius:20px;font-size:13px;border:1.5px solid #d1d5db;background:#fff;cursor:pointer;color:#4b5563;transition:all .2s}
+    .ftag:hover{border-color:#4f46e5;color:#4f46e5}
+    .ftag.active{background:#4f46e5;color:#fff;border-color:#4f46e5}
+
+    .item{padding:16px 18px;margin-bottom:10px;border-radius:12px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;transition:all .15s}
+    .item:hover{border-color:#c7d2fe;background:#fafafe}
+    .item.selected{border-color:#4f46e5;background:#f5f3ff}
+    .item.past{background:#f9fafb;opacity:.7}
+    .itop{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+    .itag{font-size:11px;padding:3px 9px;border-radius:5px;font-weight:500}
+    .idone{font-size:11px;padding:3px 9px;border-radius:5px;background:#dcfce7;color:#166534}
+    .itime{margin-left:auto;font-size:11px;color:#9ca3af}
+    .ititle{font-size:15px;font-weight:500;color:#1f2937;word-break:break-all}
+    .imeta{font-size:12px;color:#6b7280;margin-top:5px;display:flex;gap:14px}
+    .iactions{display:flex;gap:8px;margin-top:10px}
+    .ibt{font-size:12px;padding:5px 12px;border-radius:6px;border:1.5px solid #d1d5db;background:#fff;cursor:pointer;transition:all .15s;color:#4b5563}
+    .ibt:hover{background:#f3f4f6}
+    .ibt.pri{color:#4f46e5;border-color:#c7d2fe}.ibt.pri:hover{background:#f5f3ff}
+    .ibt.dan{color:#ef4444;border-color:#fecaca}.ibt.dan:hover{background:#fef2f2}
+    .empty{text-align:center;padding:80px 20px;color:#9ca3af}
+    .empty .ic{font-size:48px;margin-bottom:16px}
+    .empty h4{font-size:16px;margin-bottom:6px;color:#6b7280}
+    .empty p{font-size:13px}
+    .spinner{display:inline-block;width:32px;height:32px;border:3px solid #e5e7eb;border-top-color:#4f46e5;border-radius:50%;animation:spin .7s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    @media(max-width:900px){.grid{grid-template-columns:1fr}.input-card{position:static}.container{padding:40px 20px}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header"><h1>日程管理</h1><span class="badge">AI 智能解析</span></div>
+    <div class="grid">
+      <div class="card input-card">
+        <h3>新建日程</h3>
+        <p class="hint">支持自然语言输入，AI 自动识别时间、地点、人物</p>
+        <textarea id="schInput" placeholder="例如：明天下午3点跟张三在会议室讨论项目方案"></textarea>
+        <div class="input-actions"><button id="schBtn" class="btn">添加日程</button></div>
+        <div class="preview" id="schPreview"></div>
+      </div>
+      <div class="card">
+        <div class="list-header"><h3>我的日程</h3><span class="count" id="schCount">加载中...</span></div>
+        <div class="filters" id="schFilter">
+          <button class="ftag active" data-filter="all">全部</button>
+          <button class="ftag" data-filter="待办">待办</button>
+          <button class="ftag" data-filter="已完成">已完成</button>
+          <button class="ftag" data-filter="会议">会议</button>
+          <button class="ftag" data-filter="任务">任务</button>
+          <button class="ftag" data-filter="提醒">提醒</button>
+        </div>
+        <div id="schList"><div style="text-align:center;padding:60px"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      'use strict';
+      // API 同源：本页面和 API 在同一个服务上
+      var API = '/api';
+      var tc={会议:'#8b5cf6',任务:'#3b82f6',提醒:'#f59e0b',日程:'#10b981'};
+      var schedules=[],filter='all',selId=null;
+      var inp,btn,pre,list,count;
+      function $(s){return document.getElementById(s)}
+      function load(){
+        list.innerHTML='<div style="text-align:center;padding:60px"><div class="spinner"></div></div>';
+        fetch(API+'/schedules?_='+Date.now()).then(function(r){return r.json()}).then(function(j){
+          if(j.success){schedules=j.data||[];render()}else list.innerHTML='<div class="empty"><div class="ic">⚠</div><h4>加载失败</h4></div>'
+        }).catch(function(){list.innerHTML='<div class="empty"><div class="ic">⚠</div><h4>网络错误</h4></div>'})
+      }
+      function render(){
+        var filtered=schedules.filter(function(s){
+          if(filter==='all')return true;
+          if(filter==='待办'||filter==='已完成')return s.status===filter;
+          return s.type===filter
+        });
+        count.textContent=filtered.length+' 条日程';
+        if(!filtered.length){list.innerHTML='<div class="empty"><div class="ic">📋</div><h4>暂无日程</h4><p>在左侧输入框添加你的第一条日程</p></div>';return}
+        var now=new Date();
+        list.innerHTML=filtered.map(function(s){
+          var dt=s.start_time?new Date(s.start_time):null;
+          var past=dt&&dt<now&&s.status==='待办';
+          var today=dt&&dt.toDateString()===now.toDateString();
+          var dstr=dt?(today?'今天':(dt.getMonth()+1)+'/'+dt.getDate()):'未设定';
+          var tstr=dt?('0'+dt.getHours()).slice(-2)+':'+('0'+dt.getMinutes()).slice(-2):'';
+          var c=tc[s.type]||'#6b7280';
+          var sl=String(s.id)===String(selId)?' selected':'';
+          return '<div class="item'+(past?' past':'')+sl+'" data-id="'+s.id+'">'+
+            '<div class="itop">'+
+            '<span class="itag" style="background:'+c+'18;color:'+c+'">'+esc(s.type)+'</span>'+
+            (s.priority==='高'?'<span style="font-size:11px;color:#ef4444;font-weight:500">⚠ 紧急</span>':'')+
+            (s.status==='已完成'?'<span class="idone">✓ 已完成</span>':'')+
+            '<span class="itime">'+dstr+(tstr?' '+tstr:'')+'</span></div>'+
+            '<div class="ititle">'+esc(s.title)+'</div>'+
+            (s.person||s.location?'<div class="imeta">'+(s.person?'<span>👤 '+esc(s.person)+'</span>':'')+(s.location?'<span>📍 '+esc(s.location)+'</span>':'')+'</div>':'')+
+            '<div class="iactions">'+
+            (s.status==='待办'?'<button class="ibt pri" data-act="done" data-id="'+s.id+'">✓ 完成</button>':'<button class="ibt" data-act="undo" data-id="'+s.id+'">↩ 恢复</button>')+
+            '<button class="ibt dan" data-act="del" data-id="'+s.id+'">✕ 删除</button></div></div>'
+        }).join('');
+        list.querySelectorAll('.item').forEach(function(el){el.onclick=function(e){if(e.target.tagName==='BUTTON')return;selId=String(el.dataset.id)===String(selId)?null:el.dataset.id;render()}});
+        list.querySelectorAll('.ibt').forEach(function(el){el.onclick=function(e){e.stopPropagation();var a=el.dataset.act,id=el.dataset.id;
+          if(a==='done')mark(id,'已完成');else if(a==='undo')mark(id,'待办');else if(a==='del')del(id)
+        }})
+      }
+      function mark(id,s){fetch(API+'/schedules/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:s})}).then(function(){load()}).catch(function(){alert('操作失败')})}
+      function del(id){if(!confirm('确认删除？'))return;fetch(API+'/schedules/'+id,{method:'DELETE'}).then(function(){load()}).catch(function(){alert('删除失败')})}
+      function add(){
+        var t=inp.value.trim();if(!t)return;
+        btn.disabled=true;btn.textContent='解析中...';
+        fetch(API+'/schedules',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})})
+          .then(function(r){return r.json()}).then(function(j){
+            if(j.success){inp.value='';pre.style.display='none';load()}else alert('失败: '+(j.error||''))
+          }).catch(function(){alert('网络错误')}).finally(function(){btn.disabled=false;btn.textContent='添加日程'})
+      }
+      var timer;
+      function preview(){
+        clearTimeout(timer);
+        var t=inp.value.trim();
+        if(!t||t.length<3){pre.style.display='none';return}
+        timer=setTimeout(function(){
+          fetch(API+'/schedules/parse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})})
+            .then(function(r){return r.json()}).then(function(j){
+              if(j.success&&j.data){pre.style.display='block';var d=j.data;
+                pre.innerHTML='<strong>AI 预览 · '+esc(d.title)+'</strong>'+
+                  (d.start_time?'⏰ '+d.start_time.replace('T',' '):'')+(d.type?' · '+d.type:'')+
+                  (d.priority==='高'?' · ⚠紧急':'')+(d.person?' · 👤'+d.person:'')+(d.location?' · 📍'+d.location:'')
+              }
+            })
+        },500)
+      }
+      function esc(s){if(!s)return'';var d=document.createElement('div');d.appendChild(document.createTextNode(s));return d.innerHTML}
+      document.addEventListener('DOMContentLoaded',function(){
+        inp=$('schInput');btn=$('schBtn');pre=$('schPreview');list=$('schList');count=$('schCount');
+        btn.onclick=add;inp.oninput=preview;inp.onkeydown=function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();add()}};
+        $('schFilter').querySelectorAll('.ftag').forEach(function(el){el.onclick=function(){
+          $('schFilter').querySelectorAll('.ftag').forEach(function(b){b.classList.remove('active')});
+          el.classList.add('active');filter=el.dataset.filter;selId=null;render()
+        }});
+        load()
+      })
+    })();
+  </script>
+</body>
+</html>

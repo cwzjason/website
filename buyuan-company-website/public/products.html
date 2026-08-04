@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>产品与服务 - 埠勤商贸</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💎</text></svg>">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      line-height: 1.6;
+    }
+    .navbar {
+      position: fixed; top: 0; left: 0; right: 0; height: 60px;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid #e5e5e7;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 40px; z-index: 1000;
+    }
+    .navbar-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .plane-icon { width: 36px; height: 36px; flex-shrink: 0; }
+    .logo-text { font-size: 18px; font-weight: 600; color: #1e3a8a; letter-spacing: 0.3px; }
+    .nav-links { display: flex; list-style: none; gap: 32px; align-items: center; }
+    .nav-links a { text-decoration: none; color: #333; font-size: 14px; font-weight: 400; transition: color 0.2s; }
+    .nav-links a:hover { color: #1e3a8a; }
+    .nav-links a.active { color: #1e3a8a; font-weight: 500; }
+
+    .page-content { padding-top: 100px; padding-bottom: 80px; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 40px; }
+    .page-hero { text-align: center; margin-bottom: 60px; }
+    .page-hero h1 { font-size: 42px; font-weight: 700; color: #1d1d1f; margin-bottom: 12px; }
+    .page-hero p { font-size: 20px; color: #86868b; }
+
+    .product-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .product-card {
+      background: #ffffff; border-radius: 16px; border: 1px solid #e5e5e7;
+      padding: 32px 28px; transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .product-card:hover { transform: translateY(-4px); box-shadow: 0 8px 30px rgba(0,0,0,0.06); }
+    .product-icon { font-size: 36px; margin-bottom: 16px; }
+    .product-card h3 { font-size: 20px; font-weight: 600; color: #1d1d1f; margin-bottom: 10px; }
+    .product-card > p { font-size: 14px; color: #666; margin-bottom: 16px; line-height: 1.7; }
+    .product-features { list-style: none; }
+    .product-features li {
+      font-size: 13px; color: #86868b; padding: 4px 0; padding-left: 18px;
+      position: relative; line-height: 1.6;
+    }
+    .product-features li::before {
+      content: ""; position: absolute; left: 0; top: 10px;
+      width: 6px; height: 6px; border-radius: 50%; background: #1e3a8a;
+    }
+
+    .cta-section { text-align: center; margin-top: 60px; padding: 40px 0; }
+    .cta-section p { font-size: 17px; color: #555; margin-bottom: 20px; }
+    .btn-contact {
+      display: inline-block; background: #1e3a8a; color: #ffffff;
+      padding: 14px 32px; border-radius: 980px; text-decoration: none;
+      font-size: 17px; font-weight: 400; transition: background 0.2s;
+    }
+    .btn-contact:hover { background: #162d62; }
+
+    .footer { padding: 30px 40px; text-align: center; border-top: 1px solid #e5e5e7; background: #ffffff; }
+    .footer p { font-size: 13px; color: #86868b; }
+
+    @media (max-width: 768px) {
+      .navbar { padding: 0 20px; }
+      .nav-links { gap: 16px; flex-wrap: wrap; }
+      .nav-links a { font-size: 13px; }
+      .container { padding: 0 20px; }
+      .product-grid { grid-template-columns: 1fr; }
+      .page-hero h1 { font-size: 32px; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar">
+    <a href="index.html" class="navbar-logo">
+      <svg class="plane-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M24 4L8 36L20 30L24 44L28 30L40 36L24 4Z" fill="#1e3a8a"/>
+        <path d="M24 4L8 36L20 30L24 26L28 30L40 36L24 4Z" fill="#3b82f6"/>
+        <circle cx="24" cy="28" r="3" fill="#ffffff"/>
+        <rect x="22" y="14" width="4" height="14" rx="2" fill="#1e3a8a"/>
+      </svg>
+      <span class="logo-text">埠勤商贸</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="index.html">首页</a></li>
+      <li><a href="about.html">关于我们</a></li>
+      <li><a href="products.html" class="active">产品服务</a></li>
+      <li><a href="table.html" target="_blank">我的表格</a></li><li><a href="table1.html" target="_blank">我的表格1</a></li><li><a href="schedule.html">日程管理</a></li>
+      <li><a href="https://qcncdkprniip.feishu.cn/app/JH6eb0yXDaPbRwsW8fpcA6p3n0z?pageId=pgeakzNKwKtIs7TK" target="_blank">经营仪表盘</a></li>
+      <li><a href="contact.html">联系我们</a></li>
+    </ul>
+  </nav>
+
+  <div class="page-content">
+    <section class="page-hero">
+      <div class="container">
+        <h1>产品与服务</h1>
+        <p>全方位商贸解决方案，助力企业高效运营</p>
+      </div>
+    </section>
+
+    <section class="products-list">
+      <div class="container">
+        <div class="product-grid">
+          <div class="product-card">
+            <div class="product-icon">📦</div>
+            <h3>物资供应</h3>
+            <p>覆盖办公用品、劳保物资、工业耗材等全品类供应链服务，一站式满足企业采购需求</p>
+            <ul class="product-features">
+              <li>办公设备及耗材</li>
+              <li>劳保及安防用品</li>
+              <li>工业品及MRO物料</li>
+              <li>定制化采购方案</li>
+            </ul>
+          </div>
+          <div class="product-card">
+            <div class="product-icon">🏗️</div>
+            <h3>设备采购</h3>
+            <p>提供大型生产设备、精密仪器的采购咨询与供应服务，帮助企业高效配置资产</p>
+            <ul class="product-features">
+              <li>生产设备采购</li>
+              <li>实验室仪器设备</li>
+              <li>IT及通讯设备</li>
+              <li>设备选型咨询</li>
+            </ul>
+          </div>
+          <div class="product-card">
+            <div class="product-icon">🔗</div>
+            <h3>供应链管理</h3>
+            <p>端到端的供应链优化服务，降低采购成本，提升物资流转效率</p>
+            <ul class="product-features">
+              <li>供应商评估与管理</li>
+              <li>采购流程优化</li>
+              <li>库存优化方案</li>
+              <li>物流配送管理</li>
+            </ul>
+          </div>
+          <div class="product-card">
+            <div class="product-icon">📊</div>
+            <h3>商务服务</h3>
+            <p>专业的企业采购咨询与商务解决方案，赋能企业高效决策</p>
+            <ul class="product-features">
+              <li>采购方案咨询</li>
+              <li>供应商资源对接</li>
+              <li>订单智能处理</li>
+              <li>成本分析报告</li>
+            </ul>
+          </div>
+          <div class="product-card">
+            <div class="product-icon">🛡️</div>
+            <h3>品质管控</h3>
+            <p>严格的品质管理体系，确保每批次产品符合客户要求与行业标准</p>
+            <ul class="product-features">
+              <li>质检流程管理</li>
+              <li>供应商资质审核</li>
+              <li>产品溯源机制</li>
+              <li>售后品质保障</li>
+            </ul>
+          </div>
+          <div class="product-card">
+            <div class="product-icon">🤖</div>
+            <h3>数据智能</h3>
+            <p>利用AI技术赋能订单处理，实现自动化数据提取与智能分析</p>
+            <ul class="product-features">
+              <li>订单智能提取</li>
+              <li>数据分析报表</li>
+              <li>采购趋势预测</li>
+              <li>业务智能看板</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="cta-section">
+          <p>需要更详细的方案？我们的专业团队随时为您服务。</p>
+          <a href="contact.html" class="btn-contact">联系我们</a>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="footer">
+    <p>&copy; 2026 湖北埠勤商贸有限公司 版权所有</p>
+  </footer>
+
+  <script src="assets/js/main.js"></script>
+</body>
+</html>

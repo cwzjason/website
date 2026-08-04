@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>订单信息提取与汇总系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* 头部 */
+        .header {
+            background: white;
+            border-radius: 16px;
+            padding: 24px 32px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            color: #1a1a2e;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header h1 .icon { font-size: 28px; }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        /* 统计卡片 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            transition: transform 0.2s;
+        }
+
+        .stat-card:hover { transform: translateY(-2px); }
+
+        .stat-card .label {
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 6px;
+        }
+
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1a1a2e;
+        }
+
+        .stat-card .value.amount { color: #e74c3c; }
+
+        /* 主面板 */
+        .main-panel {
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            gap: 20px;
+        }
+
+        /* 上传区域 */
+        .upload-section {
+            background: white;
+            border-radius: 16px;
+            padding: 32px 24px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            height: fit-content;
+            position: sticky;
+            top: 20px;
+        }
+
+        .upload-section h2 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #1a1a2e;
+        }
+
+        .upload-area {
+            border: 2px dashed #d0d5dd;
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #f9fafb;
+            margin-bottom: 20px;
+        }
+
+        .upload-area:hover, .upload-area.drag-over {
+            border-color: #667eea;
+            background: #f0f0ff;
+        }
+
+        .upload-area .upload-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+
+        .upload-area p {
+            color: #888;
+            font-size: 14px;
+            margin: 4px 0;
+        }
+
+        .upload-area .primary-text {
+            color: #667eea;
+            font-weight: 500;
+        }
+
+        #fileInput { display: none; }
+
+        .file-list {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 16px;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            background: #f9fafb;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        .file-item .file-name {
+            font-size: 13px;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .file-item .file-status {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .file-status.success { background: #d4edda; color: #155724; }
+        .file-status.processing { background: #fff3cd; color: #856404; }
+        .file-status.error { background: #f8d7da; color: #721c24; }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-outline {
+            background: white;
+            color: #667eea;
+            border: 1px solid #667eea;
+        }
+
+        .btn-outline:hover { background: #f0f0ff; }
+
+        /* 导出下拉菜单 */
+        .export-menu-item:hover { background: #f0f0ff !important; }
+
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        /* 表格操作按钮 */
+        .btn-icon {
+            background: none;
+            border: 1px solid #d0d5dd;
+            border-radius: 6px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .btn-icon.edit-btn:hover {
+            background: #eef2ff;
+            border-color: #667eea;
+        }
+        .btn-icon.del-btn:hover {
+            background: #fff0f0;
+            border-color: #e74c3c;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        /* 进度条 */
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #e9ecef;
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 12px 0;
+            display: none;
+        }
+
+        .progress-bar .fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+
+        /* 结果面板 */
+        .result-section {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+
+        .result-section .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .search-bar {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .search-bar input, .search-bar select {
+            padding: 8px 12px;
+            border: 1px solid #d0d5dd;
+            border-radius: 8px;
+            font-size: 13px;
+            outline: none;
+        }
+
+        .search-bar input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .search-bar input { width: 220px; }
+
+        /* 表格 */
+        .table-wrapper {
+            overflow-x: auto;
+            max-height: 500px;
+            overflow-y: auto;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            min-width: 1200px;
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        th {
+            background: #667eea;
+            color: white;
+            padding: 12px 10px;
+            text-align: left;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #f0f0f0;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            position: relative;
+        }
+
+        /* 鼠标悬停时显示完整内容 */
+        td:hover {
+            overflow: visible;
+            white-space: normal;
+            word-break: break-all;
+            background: #f8f9ff;
+            z-index: 5;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            border-radius: 4px;
+        }
+
+        tr:hover td { background: #f8f9ff; }
+
+        /* 操作列特殊样式 */
+        td.actions-cell {
+            white-space: nowrap;
+            min-width: 80px;
+            max-width: 80px;
+        }
+        td.actions-cell:hover {
+            white-space: nowrap;
+            word-break: normal;
+            background: #f8f9ff;
+            box-shadow: none;
+        }
+
+        .platform-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .platform-badge.taobao { background: #fff0f0; color: #ff6b6b; }
+        .platform-badge.jd { background: #fff4e6; color: #e8590c; }
+        .platform-badge.pdd { background: #fff9db; color: #f08c00; }
+        .platform-badge.douyin { background: #f3f0ff; color: #7950f2; }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #aaa;
+        }
+
+        .empty-state .empty-icon { font-size: 64px; margin-bottom: 16px; }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .pagination button {
+            padding: 6px 12px;
+            border: 1px solid #d0d5dd;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .pagination button.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .pagination button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* 编辑弹窗 */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.active { display: flex; }
+
+        .modal {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+        }
+
+        .modal h3 {
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+
+        .form-group {
+            margin-bottom: 14px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: #555;
+            margin-bottom: 4px;
+        }
+
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #d0d5dd;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            font-family: inherit;
+        }
+
+        .form-group input:focus, .form-group textarea:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 24px;
+        }
+
+        /* Toast提示 */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            z-index: 200;
+            animation: slideIn 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .toast.success { background: #27ae60; }
+        .toast.error { background: #e74c3c; }
+        .toast.info { background: #3498db; }
+
+        @keyframes slideIn {
+            from { transform: translateX(100px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* 响应式 */
+        @media (max-width: 1024px) {
+            .main-panel { grid-template-columns: 1fr; }
+            .upload-section { position: static; }
+        }
+
+        @media (max-width: 768px) {
+            .header { flex-direction: column; gap: 12px; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <div class="header">
+            <h1><span class="icon">📋</span>订单信息提取与汇总系统</h1>
+            <div class="header-actions">
+                <button class="btn btn-outline btn-sm" onclick="openSettings()" title="系统设置">
+                    ⚙️ 设置
+                </button>
+                <div style="position:relative;display:inline-block;">
+                    <button class="btn btn-outline btn-sm" id="exportBtn" onclick="toggleExportMenu()">
+                        📥 导出Excel ▾
+                    </button>
+                    <div id="exportMenu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:white;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.12);z-index:50;min-width:160px;overflow:hidden;">
+                        <div class="export-menu-item" onclick="exportData('all')" style="padding:10px 16px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0;">📊 导出全部订单</div>
+                        <div class="export-menu-item" onclick="exportData('guotie')" style="padding:10px 16px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0;">🏪 仅国铁商城订单</div>
+                        <div class="export-menu-item" onclick="exportData('qixin')" style="padding:10px 16px;cursor:pointer;font-size:13px;">📦 仅齐心订单</div>
+                    </div>
+                </div>
+                <button class="btn btn-outline btn-sm" onclick="refreshAll()">🔄 刷新数据</button>
+            </div>
+        </div>
+
+        <!-- 统计卡片 -->
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="label">订单总数</div>
+                <div class="value" id="totalOrders">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">总金额</div>
+                <div class="value amount" id="totalAmount">¥0</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">国铁商城金额</div>
+                <div class="value amount" id="guotieAmount">¥0</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">齐心金额</div>
+                <div class="value amount" id="qixinAmount">¥0</div>
+            </div>
+        </div>
+
+        <!-- 主面板 -->
+        <div class="main-panel">
+            <!-- 上传区域 -->
+            <div class="upload-section">
+                <h2>📤 上传订单PDF</h2>
+                
+                <div style="margin-bottom:16px;">
+                    <label style="font-size:13px;font-weight:500;color:#555;display:block;margin-bottom:6px;">
+                        🏪 选择平台来源
+                    </label>
+                    <select id="platformSelect" style="width:100%;padding:10px 12px;border:1px solid #d0d5dd;border-radius:8px;font-size:14px;outline:none;">
+                        <option value="得力">得力</option>
+                        <option value="阳采">阳采</option>
+                        <option value="德致">德致</option>
+                        <option value="齐心">齐心</option>
+                        <option value="其他">其他</option>
+                    </select>
+                    <div style="font-size:11px;color:#999;margin-top:4px;">
+                        得力/阳采/德致/其他 使用通用模版，齐心使用独立模版
+                    </div>
+                </div>
+                
+                <div class="upload-area" id="uploadArea" 
+                     onclick="document.getElementById('fileInput').click()">
+                    <div class="upload-icon">📄</div>
+                    <p class="primary-text">点击上传或拖拽PDF文件到此处</p>
+                    <p>支持多平台订单PDF识别</p>
+                    <p style="font-size:12px;color:#bbb;">得力 | 阳采 | 德致 | 齐心 | 其他</p>
+                </div>
+                
+                <input type="file" id="fileInput" accept=".pdf" multiple 
+                       onchange="handleFiles(this.files)">
+                
+                <div class="file-list" id="fileList"></div>
+                <div class="progress-bar" id="progressBar">
+                    <div class="fill" id="progressFill"></div>
+                </div>
+                
+                <button class="btn btn-primary" id="uploadBtn" onclick="uploadFiles()" disabled>
+                    🚀 开始识别订单信息
+                </button>
+                
+                <div style="margin-top:16px; padding:12px; background:#f0f0ff; border-radius:8px; font-size:12px; color:#666;">
+                    <strong>💡 提示：</strong><br>
+                    • 先选择平台，再上传PDF文件<br>
+                    • AI自动识别订单号、金额、地址等信息<br>
+                    • 多商品订单自动拆分为多行记录<br>
+                    • 识别结果可人工编辑修正<br>
+                    • 可在企业微信中直接发送PDF识别
+                </div>
+            </div>
+
+            <!-- 结果面板 -->
+            <div class="result-section">
+                <div class="section-header">
+                    <h2 style="font-size:18px;">📊 订单列表</h2>
+                    <div class="search-bar">
+                        <select id="platformFilter" onchange="loadOrders()">
+                            <option value="国铁商城">国铁商城订单</option>
+                            <option value="得力">得力</option>
+                            <option value="阳采">阳采</option>
+                            <option value="德致">德致</option>
+                            <option value="其他">其他</option>
+                            <option value="齐心">齐心</option>
+                        </select>
+                        <input type="text" id="searchInput" 
+                               placeholder="搜索订单号/客户/商品..." 
+                               onkeyup="debounceSearch()">
+                        <button class="btn btn-outline btn-sm" onclick="loadOrders()">🔍 搜索</button>
+                    </div>
+                </div>
+
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <!-- 表头由JS动态生成 -->
+                            </tr>
+                        </thead>
+                        <tbody id="ordersTableBody">
+                            <tr>
+                                <td colspan="18">
+                                    <div class="empty-state">
+                                        <div class="empty-icon">📭</div>
+                                        <p>暂无订单数据</p>
+                                        <p style="font-size:12px;">上传PDF文件开始识别</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination" id="pagination"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 系统设置弹窗 -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal" style="max-width:500px;">
+            <h3>⚙️ 系统设置</h3>
+            <div class="form-group">
+                <label>TokenHub API Key</label>
+                <input type="text" id="tokenhubApiKey" 
+                       placeholder="粘贴你的 TokenHub API Key"
+                       style="font-family:monospace;font-size:13px;">
+                <div style="font-size:11px;color:#999;margin-top:4px;">
+                    从 <a href="https://console.cloud.tencent.com/tokenhub/apikey" target="_blank" style="color:#667eea;">TokenHub 控制台</a> 获取密钥
+                </div>
+                <div id="apiKeyStatus" style="margin-top:8px;font-size:13px;"></div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" id="settingsTestBtn" onclick="testApiKey()" style="margin-right:auto;">
+                    🔌 测试连接
+                </button>
+                <button class="btn btn-outline" onclick="closeSettingsModal()">取消</button>
+                <button class="btn btn-primary" onclick="saveSettings()" style="width:auto;">
+                    💾 保存
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 提取文本预览弹窗 -->
+    <div class="modal-overlay" id="txtViewerModal">
+        <div class="modal" style="max-width:800px;">
+            <h3 id="txtViewerTitle">📄 提取文本预览</h3>
+            <pre id="txtContent" style="
+                background:#1e1e1e; color:#d4d4d4; padding:16px; border-radius:8px;
+                max-height:500px; overflow:auto; font-size:13px; line-height:1.7;
+                white-space:pre-wrap; word-break:break-all;
+            ">加载中...</pre>
+            <div class="modal-actions" style="margin-top:12px;">
+                <button class="btn btn-outline" onclick="closeTxtViewer()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑弹窗 -->
+    <div class="modal-overlay" id="editModal">
+        <div class="modal">
+            <h3>✏️ 编辑订单信息</h3>
+            <div id="editForm"></div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeModal()">取消</button>
+                <button class="btn btn-primary" onclick="saveEdit()" style="width:auto;">
+                    💾 保存修改
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+        const API_KEY = 'order-admin-2024';
+        
+        // 模版A（得力/阳采/德致/其他）字段定义
+        const FIELDS_A = [
+            '采购单编号', '需求单编号', '审批通过时间',
+            '收料单位', '所属路局', '单位编号',
+            '供应商名称', '供应商编码', '下单人',
+            '收货人', '收货人联系方式', '收货地址',
+            '商品名称', '品牌', '单位', '数量',
+            '单价（含税）', '合计（含税）', '合计金额',
+            '发票备注', '订单备注'
+        ];
+
+        // 模版A 表格显示列（精简）
+        const TABLE_COLS_A = [
+            {key: '采购单编号', label: '采购单编号'},
+            {key: '需求单编号', label: '需求单编号'},
+            {key: '审批通过时间', label: '审批通过时间'},
+            {key: '收料单位', label: '收料单位'},
+            {key: '所属路局', label: '所属路局'},
+            {key: '供应商名称', label: '供应商名称'},
+            {key: '供应商编码', label: '供应商编码'},
+            {key: '下单人', label: '下单人'},
+            {key: '商品名称', label: '商品名称'},
+            {key: '品牌', label: '品牌'},
+            {key: '数量', label: '数量'},
+            {key: '单价（含税）', label: '单价（含税）'},
+            {key: '合计（含税）', label: '合计（含税）'},
+            {key: '合计金额', label: '合计金额'},
+            {key: '收货人', label: '收货人'},
+            {key: '收货人联系方式', label: '收货人联系方式'},
+            {key: '收货地址', label: '收货地址'},
+            {key: '_actions', label: '操作'},
+        ];
+
+        // 模版B（齐心）字段定义
+        const FIELDS_B = [
+            '采购单号', '发货日期',
+            '客户名称', '客户地址', '收货人', '联系人', '联系电话',
+            '送方名称', '收货地址', '合约单号', '经办人',
+            '序号', '货号', '产品名称', '单位', '数量',
+            '单价', '金额', '金额合计（小写）', '备注'
+        ];
+
+        // 模版B 表格显示列
+        const TABLE_COLS_B = [
+            {key: '采购单号', label: '采购单号'},
+            {key: '发货日期', label: '发货日期'},
+            {key: '客户名称', label: '客户名称'},
+            {key: '客户地址', label: '客户地址'},
+            {key: '收货人', label: '收货人'},
+            {key: '联系人', label: '联系人'},
+            {key: '联系电话', label: '联系电话'},
+            {key: '送方名称', label: '送方名称'},
+            {key: '收货地址', label: '收货地址'},
+            {key: '合约单号', label: '合约单号'},
+            {key: '经办人', label: '经办人'},
+            {key: '序号', label: '序号'},
+            {key: '货号', label: '货号'},
+            {key: '产品名称', label: '产品名称'},
+            {key: '单位', label: '单位'},
+            {key: '数量', label: '数量'},
+            {key: '单价', label: '单价'},
+            {key: '金额', label: '金额'},
+            {key: '金额合计（小写）', label: '金额合计（小写）'},
+            {key: '备注', label: '备注'},
+            {key: '_actions', label: '操作'},
+        ];
+        
+        // 判断是否为齐心平台
+        function isQixinPlatform(order) {
+            return order['平台来源'] === '齐心' || order['_platform_type'] === 'qixin';
+        }
+
+        // HTML 转义，防止 XSS
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+        
+        let pendingFiles = [];
+        let currentPage = 1;
+        let currentOrderId = null;
+        let currentOrderPlatform = '';
+
+        // ============ 上传处理 ============
+        
+        const uploadArea = document.getElementById('uploadArea');
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('drag-over');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        function handleFiles(files) {
+            pendingFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+            
+            const fileList = document.getElementById('fileList');
+            const uploadBtn = document.getElementById('uploadBtn');
+            
+            fileList.innerHTML = pendingFiles.map((f, i) => `
+                <div class="file-item">
+                    <span style="margin-right:8px;">📄</span>
+                    <span class="file-name">${f.name}</span>
+                    <span style="font-size:12px;color:#888;">${formatFileSize(f.size)}</span>
+                    <span style="cursor:pointer;margin-left:8px;color:#e74c3c;" 
+                          onclick="removeFile(${i})">✕</span>
+                </div>
+            `).join('');
+            
+            uploadBtn.disabled = pendingFiles.length === 0;
+        }
+
+        function removeFile(index) {
+            pendingFiles.splice(index, 1);
+            handleFiles(pendingFiles);
+        }
+
+        async function uploadFiles() {
+            if (pendingFiles.length === 0) return;
+            
+            const uploadBtn = document.getElementById('uploadBtn');
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            const platform = document.getElementById('platformSelect').value;
+            
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = '⏳ 正在识别...';
+            progressBar.style.display = 'block';
+            
+            let successCount = 0;
+            let failCount = 0;
+            
+            for (let i = 0; i < pendingFiles.length; i++) {
+                const file = pendingFiles[i];
+                progressFill.style.width = `${(i / pendingFiles.length) * 100}%`;
+                
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('platform', platform);
+                formData.append('use_ai', 'true');
+                
+                try {
+                    const resp = await fetch(`${API_BASE}/orders/upload`, {
+                        method: 'POST',
+                        headers: { 'X-API-Key': API_KEY },
+                        body: formData
+                    });
+                    
+                    const result = await resp.json();
+                    
+                    if (result.success) {
+                        successCount += result.count || 1;
+                        updateFileStatus(file.name, 'success', `识别成功(${result.count || 1}条)`);
+                        // 如果有TXT文件，显示查看按钮
+                        if (result.txt_file) {
+                            showTxtButton(file.name, result.txt_file);
+                        }
+                    } else {
+                        failCount++;
+                        updateFileStatus(file.name, 'error', result.error || '识别失败');
+                    }
+                } catch (err) {
+                    failCount++;
+                    updateFileStatus(file.name, 'error', '网络错误');
+                }
+            }
+            
+            progressFill.style.width = '100%';
+            setTimeout(() => {
+                progressBar.style.display = 'none';
+                progressFill.style.width = '0%';
+            }, 500);
+            
+            uploadBtn.disabled = false;
+            uploadBtn.textContent = '🚀 开始识别订单信息';
+            
+            showToast(`处理完成：成功 ${successCount} 条，失败 ${failCount} 个`, 
+                      successCount > 0 ? 'success' : 'error');
+            
+            loadOrders();
+            loadStats();
+            pendingFiles = [];
+            document.getElementById('fileList').innerHTML = '';
+        }
+
+        function updateFileStatus(filename, status, text) {
+            const items = document.querySelectorAll('.file-item');
+            items.forEach(item => {
+                if (item.querySelector('.file-name').textContent === filename) {
+                    const statusEl = item.querySelector('.file-status') || document.createElement('span');
+                    statusEl.className = `file-status ${status}`;
+                    statusEl.textContent = text;
+                    if (!item.querySelector('.file-status')) {
+                        item.appendChild(statusEl);
+                    }
+                }
+            });
+        }
+
+        function showTxtButton(filename, txtFile) {
+            const items = document.querySelectorAll('.file-item');
+            items.forEach(item => {
+                if (item.querySelector('.file-name').textContent === filename) {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn btn-outline btn-sm';
+                    btn.textContent = '📄 查看提取文本';
+                    btn.style.cssText = 'margin-left:8px;font-size:11px;padding:2px 8px;';
+                    btn.onclick = () => openTxtViewer(txtFile);
+                    item.appendChild(btn);
+                }
+            });
+        }
+
+        async function openTxtViewer(txtFile) {
+            const modal = document.getElementById('txtViewerModal');
+            const contentEl = document.getElementById('txtContent');
+            const titleEl = document.getElementById('txtViewerTitle');
+            
+            modal.classList.add('active');
+            titleEl.textContent = '提取文本: ' + txtFile;
+            contentEl.textContent = '加载中...';
+            
+            try {
+                const resp = await fetch(`${API_BASE}/txt/${encodeURIComponent(txtFile)}`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+                const data = await resp.json();
+                if (data.content) {
+                    contentEl.textContent = data.content;
+                } else {
+                    contentEl.textContent = '无法加载文本内容';
+                }
+            } catch (err) {
+                contentEl.textContent = '加载失败: ' + err.message;
+            }
+        }
+
+        function closeTxtViewer() {
+            document.getElementById('txtViewerModal').classList.remove('active');
+        }
+
+        // ============ 数据加载 ============
+        
+        async function loadOrders() {
+            const search = document.getElementById('searchInput').value;
+            const platform = document.getElementById('platformFilter').value;
+            
+            const params = new URLSearchParams({
+                page: currentPage,
+                page_size: 20,
+                search: search,
+                platform: platform
+            });
+            
+            try {
+                const resp = await fetch(`${API_BASE}/orders?${params}`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+                const data = await resp.json();
+                renderOrders(data);
+            } catch (err) {
+                console.error('加载订单失败:', err);
+            }
+        }
+
+        function renderOrders(data) {
+            const tbody = document.getElementById('ordersTableBody');
+            const thead = document.querySelector('thead tr');
+            const orders = data.data || [];
+            
+            // 判断当前筛选，决定用哪套表头
+            const filterPlatform = document.getElementById('platformFilter').value;
+            const tableCols = (filterPlatform === '齐心') ? TABLE_COLS_B : TABLE_COLS_A;
+            
+            // 更新表头
+            thead.innerHTML = tableCols.map(col => `<th>${col.label}</th>`).join('');
+            
+            if (orders.length === 0) {
+                const colSpan = tableCols.length;
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="${colSpan}">
+                            <div class="empty-state">
+                                <div class="empty-icon">📭</div>
+                                <p>暂无订单数据</p>
+                            </div>
+                        </td>
+                    </tr>`;
+                document.getElementById('pagination').innerHTML = '';
+                return;
+            }
+
+            tbody.innerHTML = orders.map(o => {
+                const isQixin = isQixinPlatform(o);
+                const platformClass = getPlatformClass(o['平台来源'] || '');
+                const cols = isQixin ? TABLE_COLS_B : TABLE_COLS_A;
+                const orderId = o['_id'] || o['采购单编号'] || o['采购单号'] || '';
+                
+                return `<tr>
+                    ${cols.map(col => {
+                        // 操作列
+                        if (col.key === '_actions') {
+                            return `<td class="actions-cell">
+                                <button class="btn-icon edit-btn" onclick="editOrder('${escapeHtml(orderId)}')" title="编辑">✏️</button>
+                                <button class="btn-icon del-btn" onclick="deleteOrder('${escapeHtml(orderId)}')" title="删除">🗑️</button>
+                            </td>`;
+                        }
+                        const val = o[col.key] || '';
+                        if (col.key === '平台来源') {
+                            return `<td><span class="platform-badge ${platformClass}">${val || '未知'}</span></td>`;
+                        }
+                        if (col.key === '合计（含税）' || col.key === '合计金额' || col.key === '金额合计（小写）') {
+                            return `<td style="font-weight:600;color:#e74c3c;">${val ? '¥' + val : '-'}</td>`;
+                        }
+                        if (col.key === '单价（含税）' || col.key === '单价' || col.key === '金额') {
+                            return `<td>${val ? '¥' + val : '-'}</td>`;
+                        }
+                        return `<td title="${escapeHtml(String(val))}">${val || '-'}</td>`;
+                    }).join('')}
+                </tr>`;
+            }).join('');
+            
+            // 分页
+            const totalPages = Math.ceil(data.total / data.page_size);
+            const pagination = document.getElementById('pagination');
+            let html = '';
+            
+            html += `<button onclick="goToPage(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>‹</button>`;
+            
+            for (let i = 1; i <= Math.min(totalPages, 10); i++) {
+                html += `<button class="${i === currentPage ? 'active' : ''}" 
+                                onclick="goToPage(${i})">${i}</button>`;
+            }
+            
+            html += `<button onclick="goToPage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>›</button>`;
+            html += `<span style="font-size:12px;color:#888;">共 ${data.total} 条</span>`;
+            
+            pagination.innerHTML = html;
+        }
+
+        function goToPage(page) {
+            currentPage = page;
+            loadOrders();
+        }
+
+        async function loadStats() {
+            try {
+                const resp = await fetch(`${API_BASE}/statistics`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+                const stats = await resp.json();
+                
+                document.getElementById('totalOrders').textContent = stats['订单总数'] || 0;
+                document.getElementById('totalAmount').textContent = 
+                    '¥' + (stats['总金额'] || 0).toLocaleString();
+                document.getElementById('guotieAmount').textContent = 
+                    '¥' + (stats['国铁商城金额'] || 0).toLocaleString();
+                document.getElementById('qixinAmount').textContent = 
+                    '¥' + (stats['齐心金额'] || 0).toLocaleString();
+            } catch (err) {
+                console.error('加载统计失败:', err);
+            }
+        }
+
+        // ============ 编辑订单 ============
+        
+        async function editOrder(orderId) {
+            try {
+                const resp = await fetch(`${API_BASE}/orders/${orderId}`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+                const order = await resp.json();
+                currentOrderId = orderId;
+                currentOrderPlatform = order['平台来源'] || '';
+                
+                // 根据平台选择对应的字段列表
+                const isQixin = isQixinPlatform(order);
+                const fields = isQixin ? FIELDS_B : FIELDS_A;
+                
+                document.getElementById('editForm').innerHTML = fields.map((f, i) => `
+                    <div class="form-group">
+                        <label>${f}</label>
+                        <input type="text" id="edit_field_${i}" data-field="${escapeHtml(f)}" value="${escapeHtml(order[f] || '')}" 
+                               placeholder="请输入${f}">
+                    </div>
+                `).join('');
+                
+                document.getElementById('editModal').classList.add('active');
+            } catch (err) {
+                showToast('获取订单信息失败', 'error');
+            }
+        }
+
+        async function saveEdit() {
+            const isQixin = currentOrderPlatform === '齐心';
+            const fields = isQixin ? FIELDS_B : FIELDS_A;
+            
+            const updates = {};
+            fields.forEach((f, i) => {
+                const el = document.getElementById(`edit_field_${i}`);
+                if (el) updates[f] = el.value;
+            });
+            
+            try {
+                const resp = await fetch(`${API_BASE}/orders/${currentOrderId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': API_KEY
+                    },
+                    body: JSON.stringify(updates)
+                });
+                
+                const result = await resp.json();
+                if (result.success) {
+                    showToast('订单更新成功', 'success');
+                    closeModal();
+                    loadOrders();
+                } else {
+                    showToast(result.error || '更新失败', 'error');
+                }
+            } catch (err) {
+                showToast('更新失败', 'error');
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('editModal').classList.remove('active');
+            currentOrderId = null;
+            currentOrderPlatform = '';
+        }
+
+        // ============ 删除订单 ============
+        
+        async function deleteOrder(orderId) {
+            if (!confirm('确定要删除这条订单吗？此操作不可恢复。')) return;
+            
+            try {
+                const resp = await fetch(`${API_BASE}/orders/${orderId}`, {
+                    method: 'DELETE',
+                    headers: { 'X-API-Key': API_KEY }
+                });
+                const result = await resp.json();
+                
+                if (result.success) {
+                    showToast('订单已删除', 'success');
+                    loadOrders();
+                    loadStats();
+                }
+            } catch (err) {
+                showToast('删除失败', 'error');
+            }
+        }
+
+        // ============ 导出 ============
+        
+        function toggleExportMenu() {
+            const menu = document.getElementById('exportMenu');
+            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function exportData(platform) {
+            document.getElementById('exportMenu').style.display = 'none';
+            window.open(`${API_BASE}/export?api_key=${API_KEY}&platform=${platform}`, '_blank');
+        }
+
+        // 点击其他区域关闭导出菜单
+        document.addEventListener('click', function(e) {
+            const menu = document.getElementById('exportMenu');
+            const btn = document.getElementById('exportBtn');
+            if (menu && btn && !btn.contains(e.target) && !menu.contains(e.target)) {
+                menu.style.display = 'none';
+            }
+        });
+
+        // ============ 系统设置 ============
+
+        async function openSettings() {
+            document.getElementById('settingsModal').classList.add('active');
+            document.getElementById('tokenhubApiKey').value = '';
+            document.getElementById('apiKeyStatus').innerHTML = '';
+            
+            // 加载当前设置
+            try {
+                const resp = await fetch(`${API_BASE}/settings`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+                const data = await resp.json();
+                document.getElementById('tokenhubApiKey').placeholder = data.has_key 
+                    ? '已配置 ' + data.tokenhub_api_key + '（输入新密钥可覆盖）'
+                    : '粘贴你的 TokenHub API Key';
+                if (data.has_key) {
+                    document.getElementById('apiKeyStatus').innerHTML = 
+                        '<span style="color:#27ae60;">✅ 当前已配置 API Key</span>';
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function saveSettings() {
+            const apiKey = document.getElementById('tokenhubApiKey').value.trim();
+            if (!apiKey) {
+                showToast('请输入 API Key', 'error');
+                return;
+            }
+            
+            try {
+                const resp = await fetch(`${API_BASE}/settings`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': API_KEY
+                    },
+                    body: JSON.stringify({ tokenhub_api_key: apiKey })
+                });
+                const result = await resp.json();
+                if (result.success) {
+                    showToast('API Key 已保存', 'success');
+                    closeSettingsModal();
+                } else {
+                    showToast(result.error || '保存失败', 'error');
+                }
+            } catch (err) {
+                showToast('保存失败: 网络错误', 'error');
+            }
+        }
+
+        async function testApiKey() {
+            const apiKey = document.getElementById('tokenhubApiKey').value.trim();
+            const statusEl = document.getElementById('apiKeyStatus');
+            const btn = document.getElementById('settingsTestBtn');
+            
+            btn.disabled = true;
+            btn.textContent = '⏳ 测试中...';
+            statusEl.innerHTML = '<span style="color:#888;">正在测试连接...</span>';
+            
+            try {
+                const body = apiKey ? { tokenhub_api_key: apiKey } : {};
+                const resp = await fetch(`${API_BASE}/settings/test`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': API_KEY
+                    },
+                    body: JSON.stringify(body)
+                });
+                const result = await resp.json();
+                
+                if (result.success) {
+                    statusEl.innerHTML = '<span style="color:#27ae60;">✅ ' + result.message + '</span>';
+                } else {
+                    statusEl.innerHTML = '<span style="color:#e74c3c;">❌ ' + result.error + '</span>';
+                }
+            } catch (err) {
+                statusEl.innerHTML = '<span style="color:#e74c3c;">❌ 请求失败</span>';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🔌 测试连接';
+            }
+        }
+
+        function closeSettingsModal() {
+            document.getElementById('settingsModal').classList.remove('active');
+        }
+
+        // ============ 工具函数 ============
+        
+        function refreshAll() {
+            loadOrders();
+            loadStats();
+        }
+
+        function getPlatformClass(platform) {
+            const map = {
+                '得力': 'jd',
+                '阳采': 'taobao',
+                '德致': 'douyin',
+                '齐心': 'pdd',
+                '其他': ''
+            };
+            return map[platform] || '';
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        let searchTimer;
+        function debounceSearch() {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => {
+                currentPage = 1;
+                loadOrders();
+            }, 500);
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
+        }
+
+        // 点击弹窗外部关闭
+        document.getElementById('editModal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+        document.getElementById('settingsModal').addEventListener('click', function(e) {
+            if (e.target === this) closeSettingsModal();
+        });
+        document.getElementById('txtViewerModal').addEventListener('click', function(e) {
+            if (e.target === this) closeTxtViewer();
+        });
+
+        // 键盘快捷键
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+                closeSettingsModal();
+                closeTxtViewer();
+            }
+        });
+
+        // 初始化
+        loadOrders();
+        loadStats();
+    </script>
+</body>
+</html>

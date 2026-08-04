@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 - 埠勤商贸管理平台</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💎</text></svg>">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .login-card {
+      background: #ffffff;
+      border-radius: 20px;
+      border: 1px solid #e5e5e7;
+      padding: 48px 40px;
+      width: 100%;
+      max-width: 400px;
+    }
+    .logo-area { text-align: center; margin-bottom: 32px; }
+    .logo-icon {
+      width: 56px; height: 56px; margin: 0 auto 16px;
+      background: #1e3a8a; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .logo-icon svg { width: 30px; height: 30px; }
+    .logo-area h2 { font-size: 22px; font-weight: 700; color: #1d1d1f; margin-bottom: 6px; }
+    .logo-area p { font-size: 14px; color: #86868b; }
+
+    .err-msg {
+      background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px;
+      padding: 12px 16px; color: #dc2626; font-size: 13px;
+      margin-bottom: 20px; display: none;
+    }
+    .err-msg.show { display: block; }
+
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 14px; font-weight: 500; color: #333; margin-bottom: 6px; }
+    .form-group input {
+      width: 100%; border: 1px solid #e5e5e7; border-radius: 10px;
+      padding: 12px 14px; font-size: 15px; font-family: inherit;
+      transition: border-color 0.2s; outline: none;
+    }
+    .form-group input:focus { border-color: #1e3a8a; }
+
+    .btn-login {
+      display: block; width: 100%; background: #1e3a8a; color: #ffffff;
+      border: none; border-radius: 12px; padding: 14px; font-size: 16px;
+      font-weight: 500; cursor: pointer; transition: background 0.2s;
+      margin-top: 8px;
+    }
+    .btn-login:hover { background: #162d62; }
+    .btn-login:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .footer-text { text-align: center; margin-top: 24px; color: #86868b; font-size: 13px; }
+  </style>
+</head>
+<body>
+<div class="login-card">
+  <div class="logo-area">
+    <div class="logo-icon">
+      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M24 4L8 36L20 30L24 44L28 30L40 36L24 4Z" fill="#ffffff" opacity="0.9"/>
+        <path d="M24 4L8 36L20 30L24 26L28 30L40 36L24 4Z" fill="#93c5fd"/>
+        <circle cx="24" cy="28" r="3" fill="#1e3a8a"/>
+        <rect x="22" y="14" width="4" height="14" rx="2" fill="#ffffff"/>
+      </svg>
+    </div>
+    <h2>埠勤商贸管理平台</h2>
+    <p>请使用管理员账号登录</p>
+  </div>
+
+  <div class="err-msg" id="errMsg"></div>
+
+  <form id="loginForm">
+    <div class="form-group">
+      <label for="username">用户名</label>
+      <input type="text" id="username" placeholder="请输入用户名" autocomplete="username" required>
+    </div>
+    <div class="form-group">
+      <label for="password">密码</label>
+      <input type="password" id="password" placeholder="请输入密码" autocomplete="current-password" required>
+    </div>
+    <button type="submit" class="btn-login" id="loginBtn">登 录</button>
+  </form>
+
+  <p class="footer-text">&copy; 2026 湖北埠勤商贸有限公司 版权所有</p>
+</div>
+
+<script src="assets/js/auth-guard.js?v=17"></script>
+<script>
+(function() {
+  var API_BASE = '/api';
+
+  // 焦点定位
+  document.getElementById('username').focus();
+
+  var loading = false;
+  document.getElementById('loginForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    if (loading) return;
+
+    var username = document.getElementById('username').value.trim();
+    var password = document.getElementById('password').value;
+    var errMsg = document.getElementById('errMsg');
+    errMsg.classList.remove('show');
+
+    if (!username) { errMsg.textContent = '请输入用户名'; errMsg.classList.add('show'); return; }
+    if (!password) { errMsg.textContent = '请输入密码'; errMsg.classList.add('show'); return; }
+
+    loading = true;
+    var btn = document.getElementById('loginBtn');
+    btn.disabled = true;
+    btn.textContent = '登录验证中...';
+
+    fetch(API_BASE + '/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username, password: password })
+    })
+    .then(function(r) {
+      return r.json().then(function(d) { return { status: r.status, data: d }; });
+    })
+    .then(function(result) {
+      if (result.status === 200 && result.data.success) {
+        sessionStorage.setItem('token', result.data.token);
+        localStorage.setItem('buqin_token', result.data.token);
+        sessionStorage.setItem('user', JSON.stringify(result.data.user));
+        localStorage.setItem('buqin_user', JSON.stringify(result.data.user));
+        location.replace('/table.html');
+      } else {
+        errMsg.textContent = result.data.error || '登录失败，请重试';
+        errMsg.classList.add('show');
+        loading = false;
+        btn.disabled = false;
+        btn.textContent = '登 录';
+      }
+    })
+    .catch(function() {
+      errMsg.textContent = '网络错误，请检查连接后重试';
+      errMsg.classList.add('show');
+      loading = false;
+      btn.disabled = false;
+      btn.textContent = '登 录';
+    });
+  });
+})();
+</script>
+</body>
+</html>
