@@ -30,7 +30,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 # ============ API密钥验证（可选） ============
-API_KEY = os.environ.get("API_KEY", "your-api-key-change-me")
+API_KEY = os.environ.get("API_KEY", "order-admin-2024")
 
 def require_api_key(f):
     @wraps(f)

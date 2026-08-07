@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>联系我们 - 埠勤商贸</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💎</text></svg>">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      line-height: 1.6;
+    }
+    .navbar {
+      position: fixed; top: 0; left: 0; right: 0; height: 60px;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid #e5e5e7;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 40px; z-index: 1000;
+    }
+    .navbar-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .plane-icon { width: 36px; height: 36px; flex-shrink: 0; }
+    .logo-text { font-size: 18px; font-weight: 600; color: #1e3a8a; letter-spacing: 0.3px; }
+    .nav-links { display: flex; list-style: none; gap: 32px; align-items: center; }
+    .nav-links a { text-decoration: none; color: #333; font-size: 14px; font-weight: 400; transition: color 0.2s; }
+    .nav-links a:hover { color: #1e3a8a; }
+    .nav-links a.active { color: #1e3a8a; font-weight: 500; }
+
+    .page-content { padding-top: 100px; padding-bottom: 80px; }
+    .container { max-width: 1000px; margin: 0 auto; padding: 0 40px; }
+    .page-hero { text-align: center; margin-bottom: 60px; }
+    .page-hero h1 { font-size: 42px; font-weight: 700; color: #1d1d1f; margin-bottom: 12px; }
+    .page-hero p { font-size: 20px; color: #86868b; }
+
+    .contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+    
+    .contact-info h2 { font-size: 24px; font-weight: 600; margin-bottom: 24px; }
+    .info-item {
+      display: flex; gap: 16px; padding: 20px;
+      background: #ffffff; border-radius: 12px; border: 1px solid #e5e5e7;
+      margin-bottom: 12px; transition: transform 0.2s;
+    }
+    .info-item:hover { transform: translateY(-2px); }
+    .info-icon { font-size: 24px; flex-shrink: 0; width: 40px; text-align: center; }
+    .info-item h4 { font-size: 15px; font-weight: 600; color: #1d1d1f; margin-bottom: 4px; }
+    .info-item p { font-size: 14px; color: #666; }
+
+    .contact-form-wrapper h2 { font-size: 24px; font-weight: 600; margin-bottom: 24px; }
+    .contact-form {
+      background: #ffffff; border-radius: 16px; border: 1px solid #e5e5e7;
+      padding: 32px;
+    }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; font-size: 14px; font-weight: 500; color: #333; margin-bottom: 6px; }
+    .form-group input, .form-group textarea {
+      width: 100%; border: 1px solid #e5e5e7; border-radius: 10px;
+      padding: 12px 14px; font-size: 15px; font-family: inherit;
+      transition: border-color 0.2s; outline: none; resize: vertical;
+    }
+    .form-group input:focus, .form-group textarea:focus { border-color: #1e3a8a; }
+    .form-group textarea { min-height: 120px; }
+    .btn-submit {
+      display: block; width: 100%; background: #1e3a8a; color: #ffffff;
+      border: none; border-radius: 12px; padding: 14px; font-size: 16px;
+      font-weight: 500; cursor: pointer; transition: background 0.2s;
+    }
+    .btn-submit:hover { background: #162d62; }
+    .form-message { margin-top: 12px; text-align: center; font-size: 14px; color: #1e3a8a; }
+
+    .footer { padding: 30px 40px; text-align: center; border-top: 1px solid #e5e5e7; background: #ffffff; }
+    .footer p { font-size: 13px; color: #86868b; }
+
+    @media (max-width: 768px) {
+      .navbar { padding: 0 20px; }
+      .nav-links { gap: 16px; }
+      .nav-links a { font-size: 13px; }
+      .container { padding: 0 20px; }
+      .contact-grid { grid-template-columns: 1fr; }
+      .page-hero h1 { font-size: 32px; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar">
+    <a href="index.html" class="navbar-logo">
+      <svg class="plane-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M24 4L8 36L20 30L24 44L28 30L40 36L24 4Z" fill="#1e3a8a"/>
+        <path d="M24 4L8 36L20 30L24 26L28 30L40 36L24 4Z" fill="#3b82f6"/>
+        <circle cx="24" cy="28" r="3" fill="#ffffff"/>
+        <rect x="22" y="14" width="4" height="14" rx="2" fill="#1e3a8a"/>
+      </svg>
+      <span class="logo-text">埠勤商贸</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="index.html">首页</a></li>
+      <li><a href="about.html">关于我们</a></li>
+      <li><a href="products.html">产品服务</a></li>
+      <li><a href="mall/index.html" target="_blank">埠勤商城</a></li>
+      <li><a href="https://qcncdkprniip.feishu.cn/app/JH6eb0yXDaPbRwsW8fpcA6p3n0z?pageId=pgeakzNKwKtIs7TK" target="_blank">经营仪表盘</a></li>
+      <li><a href="contact.html" class="active">联系我们</a></li>
+    </ul>
+  </nav>
+
+  <div class="page-content">
+    <section class="page-hero">
+      <div class="container">
+        <h1>联系我们</h1>
+        <p>期待与您的合作，共创美好未来</p>
+      </div>
+    </section>
+
+    <section class="contact-section">
+      <div class="container">
+        <div class="contact-grid">
+          <div class="contact-info">
+            <h2>联系方式</h2>
+            <div class="info-item">
+              <span class="info-icon">📍</span>
+              <div>
+                <h4>公司地址</h4>
+                <p>中国 · 深圳</p>
+                <p>具体地址请致电或邮件咨询</p>
+              </div>
+            </div>
+            <div class="info-item">
+              <span class="info-icon">🌐</span>
+              <div>
+                <h4>官方网站</h4>
+                <p>buqin.com.cn</p>
+              </div>
+            </div>
+            <div class="info-item">
+              <span class="info-icon">📧</span>
+              <div>
+                <h4>电子邮箱</h4>
+                <p>contact@buqin.com.cn</p>
+              </div>
+            </div>
+            <div class="info-item">
+              <span class="info-icon">🕐</span>
+              <div>
+                <h4>工作时间</h4>
+                <p>周一至周五 9:00 - 18:00</p>
+                <p>周六 10:00 - 16:00</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="contact-form-wrapper">
+            <h2>在线留言</h2>
+            <form id="contactForm" class="contact-form">
+              <div class="form-group">
+                <label for="name">姓名 *</label>
+                <input type="text" id="name" name="name" placeholder="请输入您的姓名" required>
+              </div>
+              <div class="form-group">
+                <label for="email">邮箱 *</label>
+                <input type="email" id="email" name="email" placeholder="请输入您的邮箱" required>
+              </div>
+              <div class="form-group">
+                <label for="phone">电话</label>
+                <input type="tel" id="phone" name="phone" placeholder="请输入您的电话">
+              </div>
+              <div class="form-group">
+                <label for="company">公司名称</label>
+                <input type="text" id="company" name="company" placeholder="请输入您的公司名称">
+              </div>
+              <div class="form-group">
+                <label for="message">留言内容 *</label>
+                <textarea id="message" name="message" rows="5" placeholder="请描述您的需求或问题" required></textarea>
+              </div>
+              <button type="submit" class="btn-submit">
+                <span class="btn-text">提交留言</span>
+                <span class="btn-loading" style="display:none;">提交中...</span>
+              </button>
+              <div id="formMessage" class="form-message"></div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="footer">
+    <p>&copy; 2026 湖北埠勤商贸有限公司 版权所有</p>
+  </footer>
+
+  <script src="assets/js/main.js"></script>
+  <script>
+    document.getElementById('contactForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      var btn = this.querySelector('.btn-submit');
+      var text = btn.querySelector('.btn-text');
+      var loading = btn.querySelector('.btn-loading');
+      text.style.display = 'none';
+      loading.style.display = 'inline';
+      btn.disabled = true;
+      setTimeout(function() {
+        text.style.display = 'inline';
+        loading.style.display = 'none';
+        btn.disabled = false;
+        document.getElementById('formMessage').textContent = '留言已提交，我们会尽快与您联系！';
+        e.target.reset();
+      }, 1500);
+    });
+  </script>
+</body>
+</html>

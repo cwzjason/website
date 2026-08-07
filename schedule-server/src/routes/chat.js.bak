@@ -1,0 +1,1127 @@
+/**
+ * Chat 路由 - AI 对话 + 日程提取 + 会话管理
+ * 对接豆包 API，处理语音转文字，管理聊天历史（支持多会话）
+ */
+const express = require('express');
+const doubao = require('../services/doubao');
+const crypto = require('crypto');
+
+function genSessionId() {
+  return 's_' + Date.now().toString(36) + '_' + crypto.randomBytes(4).toString('hex');
+}
+
+// ========== 日程查询辅助 ==========
+
+/**
+ * 检测用户消息是否在查询自己已有的日程
+ * 返回 { dateFrom, dateTo, scheduleType } 或 null
+ */
+function detectScheduleQuery(msg) {
+  if (!msg) return null;
+  const text = msg;
+
+  let dateFrom = null, dateTo = null;
+  let scheduleType = null;
+
+  const today = new Date();
+  const toDateStr = (d) => d.toISOString().split('T')[0];
+
+  if (/今天|今日/.test(text)) {
+    dateFrom = dateTo = toDateStr(today);
+  } else if (/明天|明日/.test(text)) {
+    const t = new Date(today); t.setDate(t.getDate() + 1);
+    dateFrom = dateTo = toDateStr(t);
+  } else if (/后天/.test(text)) {
+    const t = new Date(today); t.setDate(t.getDate() + 2);
+    dateFrom = dateTo = toDateStr(t);
+  } else if (/本周|这周|这礼拜/.test(text)) {
+    const day = today.getDay() || 7;
+    const mon = new Date(today); mon.setDate(today.getDate() - day + 1);
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    dateFrom = toDateStr(mon); dateTo = toDateStr(sun);
+  } else if (/下周|下礼拜/.test(text)) {
+    const day = today.getDay() || 7;
+    const nextMon = new Date(today); nextMon.setDate(today.getDate() - day + 8);
+    const nextSun = new Date(nextMon); nextSun.setDate(nextMon.getDate() + 6);
+    dateFrom = toDateStr(nextMon); dateTo = toDateStr(nextSun);
+  } else if (/最近|近期|未来|后面/.test(text)) {
+    dateFrom = toDateStr(today);
+    const end = new Date(today); end.setDate(today.getDate() + 7);
+    dateTo = toDateStr(end);
+  }
+
+  if (/会议|开会/.test(text)) scheduleType = '会议';
+  else if (/任务|待办/.test(text)) scheduleType = '任务';
+  else if (/提醒/.test(text)) scheduleType = '提醒';
+
+  // 查询意图关键词
+  const isQueryLike = /有几个|多少个|有多少|有什么|有哪些|查询|查看|看看|查查|告诉我|我的.*日程|我的.*安排|日程.*怎么样|安排.*情况|梳理一下|总结一下/.test(text);
+
+  if (!isQueryLike && !dateFrom) return null;
+
+  return { dateFrom, dateTo, scheduleType };
+}
+
+/**
+ * 从数据库查询日程
+ */
+function querySchedulesFromDb(db, openid, { dateFrom, dateTo, scheduleType }) {
+  let sql = 'SELECT title, type, start_time, end_time, priority, location, status FROM schedules WHERE openid = ?';
+  const params = [openid];
+
+  if (dateFrom && dateTo) {
+    sql += ' AND date(start_time) BETWEEN ? AND ?';
+    params.push(dateFrom, dateTo);
+  } else if (dateFrom) {
+    sql += ' AND date(start_time) >= ?';
+    params.push(dateFrom);
+  } else if (dateTo) {
+    sql += ' AND date(start_time) <= ?';
+    params.push(dateTo);
+  } else {
+    // 无日期关键词，默认查未来 7 天
+    const today = new Date().toISOString().split('T')[0];
+    const end = new Date(); end.setDate(end.getDate() + 7);
+    sql += ' AND date(start_time) BETWEEN ? AND ?';
+    params.push(today, end.toISOString().split('T')[0]);
+  }
+
+  if (scheduleType) {
+    sql += ' AND type = ?';
+    params.push(scheduleType);
+  }
+
+  sql += ' ORDER BY start_time ASC LIMIT 20';
+
+  try {
+    return db.prepare(sql).all(...params);
+  } catch (e) {
+    console.error('[ScheduleQuery] DB 查询失败:', e.message);
+    return [];
+  }
+}
+
+/**
+ * 将日程数据格式化为 AI 可读的文本
+ */
+function formatScheduleContext(rows, openid) {
+  if (!rows || rows.length === 0) return ''; // 空结果不注入，让 AI 自由回答
+
+  // 按类型统计
+  const typeCount = {};
+  rows.forEach(r => { typeCount[r.type] = (typeCount[r.type] || 0) + 1; });
+
+  let text = '## 该用户的日程数据（来自数据库）\n';
+  text += `共 ${rows.length} 条日程：`;
+  const typeParts = [];
+  Object.entries(typeCount).forEach(([t, c]) => typeParts.push(`${t} ${c}条`));
+  text += typeParts.join('，') + '\n\n';
+
+  rows.forEach((r, i) => {
+    const start = r.start_time || '';
+    const end = r.end_time || '';
+    const timeStr = start === end ? start : `${start} ~ ${end}`;
+    text += `${i + 1}. [${r.type}][${r.priority}] ${r.title}`;
+    if (timeStr) text += ` | ${timeStr}`;
+    if (r.location) text += ` | 📍${r.location}`;
+    if (r.status) text += ` | ${r.status}`;
+    text += '\n';
+  });
+
+  text += '\n请基于以上真实数据回答。如果用户问数量请准确计数。如果没有匹配的日程请如实说明。';
+  return text;
+}
+
+/**
+ * 处理日程更新：查找用户最近的日程，合并 AI 传来的更新字段
+ * @returns 更新后的完整日程对象，或 null
+ */
+function handleScheduleUpdate(db, openid, scheduleUpdates) {
+  // 查找用户最近创建的日程（优先匹配标题，其次找最新）
+  let recentSchedule = null;
+  if (scheduleUpdates.title) {
+    recentSchedule = db.prepare(
+      'SELECT * FROM schedules WHERE openid = ? AND title LIKE ? ORDER BY created_at DESC LIMIT 1'
+    ).get(openid, `%${scheduleUpdates.title}%`);
+  }
+  if (!recentSchedule) {
+    recentSchedule = db.prepare(
+      'SELECT * FROM schedules WHERE openid = ? ORDER BY created_at DESC LIMIT 1'
+    ).get(openid);
+  }
+
+  if (!recentSchedule) {
+    console.log('[ScheduleUpdate] 未找到用户日程，无法更新');
+    return null;
+  }
+
+  // 构建更新的字段（只更新 AI 明确传了的字段）
+  const updates = [];
+  const params = [];
+
+  if (scheduleUpdates.title !== undefined) {
+    updates.push('title = ?');
+    params.push(scheduleUpdates.title);
+  }
+  if (scheduleUpdates.person !== undefined) {
+    updates.push('person = ?');
+    params.push(scheduleUpdates.person);
+  }
+  if (scheduleUpdates.location !== undefined) {
+    updates.push('location = ?');
+    params.push(scheduleUpdates.location);
+  }
+  if (scheduleUpdates.description !== undefined) {
+    updates.push('description = ?');
+    params.push(scheduleUpdates.description);
+  }
+  if (scheduleUpdates.type !== undefined) {
+    updates.push('type = ?');
+    params.push(scheduleUpdates.type);
+  }
+  if (scheduleUpdates.priority !== undefined) {
+    updates.push('priority = ?');
+    params.push(scheduleUpdates.priority);
+  }
+  if (scheduleUpdates.start_time !== undefined) {
+    updates.push('start_time = ?');
+    params.push(scheduleUpdates.start_time);
+  }
+  if (scheduleUpdates.end_time !== undefined) {
+    updates.push('end_time = ?');
+    params.push(scheduleUpdates.end_time);
+  }
+
+  if (updates.length === 0) {
+    console.log('[ScheduleUpdate] 无字段需要更新');
+    return null;
+  }
+
+  updates.push('updated_at = CURRENT_TIMESTAMP');
+  params.push(recentSchedule.id);
+
+  try {
+    db.prepare(`UPDATE schedules SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    console.log('[ScheduleUpdate] 日程已更新:', { id: recentSchedule.id, fields: Object.keys(scheduleUpdates).join(', ') });
+    return db.prepare('SELECT * FROM schedules WHERE id = ?').get(recentSchedule.id);
+  } catch (err) {
+    console.error('[ScheduleUpdate] DB更新失败:', err.message);
+    return null;
+  }
+}
+
+/**
+ * 检测是否为更新意图（用于注入最近日程上下文）
+ */
+function isUpdateIntent(msg) {
+  if (!msg) return false;
+  return /加入|补充|备注|加上|也叫上|改成|修改|换成|增加|换到/.test(msg);
+}
+
+/**
+ * 获取最近日程上下文（注入给 AI 做更新参考）
+ */
+function getRecentScheduleContext(db, openid) {
+  const rows = db.prepare(
+    'SELECT title, person, location, description, type, start_time FROM schedules WHERE openid = ? ORDER BY created_at DESC LIMIT 2'
+  ).all(openid);
+  if (!rows || rows.length === 0) return '';
+  let text = '## 该用户最近创建的日程（供更新参考）\n';
+  rows.forEach((r, i) => {
+    text += `${i + 1}. 事件：${r.title || '无'} | 人物：${r.person || '无'} | 地点：${r.location || '无'} | 备注：${r.description || '无'} | 时间：${r.start_time || '无'}\n`;
+  });
+  text += '用户如果要补充、修改、加入信息，是针对上面最近的日程。请用 type:"update" 更新对应字段。';
+  return text;
+}
+
+/**
+ * 关键词预检测模块类型（在AI判断之前先提供强提示）
+ * 返回 { moduleHint: string|null }，用于注入到系统消息中
+ */
+function detectModuleIntent(msg) {
+  if (!msg) return { moduleHint: null };
+  const lower = msg.toLowerCase();
+
+  // 检测是否有明确的时间/地点信息（可能是日程而非模块）
+  const hasScheduleInfo = /\d{1,2}[点:：时]\d{0,2}|\d{4}-\d{2}-\d{2}|在.{2,8}($|，|,|；|。)/.test(msg);
+
+  // 任务相关关键词（不含时间地点才判定为任务模块）
+  if (/^(创建|添加|新建|加个)\s*(任务|待办|todo)/i.test(msg) ||
+      /任务|待办|todo|要做|别忘了|代办/.test(lower) && !hasScheduleInfo && !/日程|会议|提醒|约/.test(lower)) {
+    return { moduleHint: 'task', moduleLabel: '任务' };
+  }
+  // 灵感/笔记
+  if (/灵感|想法|创意|点子|笔记|备忘|想到|记录一下/.test(lower) && !hasScheduleInfo) {
+    return { moduleHint: 'inspiration', moduleLabel: '灵感' };
+  }
+  // 申请/审批
+  if (/申请|审批|请假|出差申请/.test(lower)) {
+    return { moduleHint: 'apply', moduleLabel: '申请' };
+  }
+  // 报销/费用
+  if (/报销|费用|发票|花了|花费|报账/.test(lower)) {
+    return { moduleHint: 'expense', moduleLabel: '报销' };
+  }
+  return { moduleHint: null, moduleLabel: null };
+}
+
+/**
+ * 解析 AI 返回文本，保存助手消息到 DB，并写入 SSE 完成事件
+ */
+function sendFinalResult(res, fullText, sessionId, db, openid, usage) {
+  let replyText = fullText;
+  let draftSchedule = null;
+  let resultType = 'chat';
+  let resultModule = 'schedule';
+  let resultData = null;
+
+  if (fullText && fullText.trim()) {
+    try {
+      let jsonStr = fullText.trim();
+      if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
+      if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
+      if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
+      jsonStr = jsonStr.trim();
+      const parsed = JSON.parse(jsonStr);
+      replyText = parsed.text || fullText;
+      resultType = parsed.type || 'chat';
+      resultModule = parsed.module || 'schedule';
+      draftSchedule = parsed.schedule || null;
+
+      // 处理非日程模块：直接在服务端创建
+      if (resultType === 'create' && resultModule !== 'schedule') {
+        const created = handleModuleCreate(db, openid, resultModule, parsed);
+        if (created) {
+          resultData = created;
+          replyText = replyText || createSuccessReply(resultModule, parsed);
+          // 标记为已创建，前端直接刷新对应模块
+        } else {
+          // 创建失败，降级为聊天
+          resultType = 'chat';
+          replyText = replyText + '\n（创建失败，请重试）';
+        }
+      }
+
+      // 查询类响应：如果有数据注入到 resultData
+      if (resultType === 'query' && parsed.data) {
+        resultData = parsed.data;
+      }
+    } catch (e) {
+      // 非 JSON 输出，保留原文字
+    }
+  }
+
+  // 如果是更新类型，服务端自动执行更新
+  if (resultType === 'update' && draftSchedule) {
+    const updatedSchedule = handleScheduleUpdate(db, openid, draftSchedule);
+    if (updatedSchedule) {
+      draftSchedule = updatedSchedule;
+      console.log('[Chat/Stream] 日程更新成功:', updatedSchedule.id);
+    } else {
+      // 没有找到可更新的日程，降级为普通聊天
+      resultType = 'chat';
+      draftSchedule = null;
+      if (replyText) {
+        replyText = replyText + '\n\n（未找到最近的日程，请先创建一个日程）';
+      }
+    }
+  }
+
+  if (!replyText || !replyText.trim()) {
+    replyText = '收到您的消息，但我不太确定如何帮您。可以尝试描述您的日程，例如"明天下午3点开会"。';
+  }
+
+  // 保存助手消息到 DB
+  try {
+    const insertHistory = db.prepare(
+      'INSERT INTO chat_history (openid, role, content, result_type, result_data, session_id) VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    const historyType = resultData ? resultModule : (draftSchedule ? (resultType === 'update' ? 'schedule_updated' : 'schedule') : 'chat');
+    insertHistory.run(openid, 'assistant', replyText,
+      historyType,
+      resultData ? JSON.stringify(resultData) : (draftSchedule ? JSON.stringify(draftSchedule) : null),
+      sessionId
+    );
+  } catch (err) {
+    console.error('[Chat/Stream] 保存助手消息失败:', err.message);
+  }
+
+  // 发送完成事件
+  res.write(`data: ${JSON.stringify({
+    done: true,
+    text: replyText,
+    type: resultType,
+    module: resultModule,
+    schedule: resultModule === 'schedule' ? draftSchedule : null,
+    task: resultModule === 'task' ? resultData : null,
+    inspiration: resultModule === 'inspiration' ? resultData : null,
+    apply: resultModule === 'apply' ? resultData : null,
+    expense: resultModule === 'expense' ? resultData : null,
+    session_id: sessionId,
+    usage: usage,
+  })}\n\n`);
+  res.end();
+}
+
+/**
+ * 处理非日程模块的创建（任务/灵感/申请/报销）
+ */
+function handleModuleCreate(db, openid, moduleType, parsed) {
+  try {
+    const data = parsed[moduleType];
+    if (!data) return null;
+
+    switch (moduleType) {
+      case 'task': return createTask(db, openid, data);
+      case 'inspiration': return createInspiration(db, openid, data);
+      case 'apply': return createApply(db, openid, data);
+      case 'expense': return createExpense(db, openid, data);
+      default: return null;
+    }
+  } catch (err) {
+    console.error(`[ModuleCreate] 创建 ${moduleType} 失败:`, err.message);
+    return null;
+  }
+}
+
+function createTask(db, openid, data) {
+  const now = new Date().toISOString();
+  const result = db.prepare(
+    `INSERT INTO tasks (openid, title, priority, due_date, description, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`
+  ).run(openid, data.title || '新任务', data.priority || '中', data.due_date || null,
+    data.description || '', now, now);
+  return { id: result.lastInsertRowid, title: data.title, module: 'task' };
+}
+
+function createInspiration(db, openid, data) {
+  const now = new Date().toISOString();
+  const result = db.prepare(
+    `INSERT INTO inspirations (openid, title, tags, description, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(openid, data.title || '新灵感', data.tags || '', data.description || '', now, now);
+  return { id: result.lastInsertRowid, title: data.title, module: 'inspiration' };
+}
+
+function createApply(db, openid, data) {
+  const now = new Date().toISOString();
+  const result = db.prepare(
+    `INSERT INTO applications (openid, title, applicant, description, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'pending', ?, ?)`
+  ).run(openid, data.title || '新申请', data.applicant || '我', data.description || '', now, now);
+  return { id: result.lastInsertRowid, title: data.title, module: 'apply' };
+}
+
+function createExpense(db, openid, data) {
+  const now = new Date().toISOString();
+  const result = db.prepare(
+    `INSERT INTO expenses (openid, title, amount, category, expense_date, description, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
+  ).run(openid, data.title || '新报销', data.amount || 0, data.category || '其他',
+    data.expense_date || now.split('T')[0], data.description || '', now, now);
+  return { id: result.lastInsertRowid, title: data.title, module: 'expense' };
+}
+
+function createSuccessReply(moduleType, parsed) {
+  const data = parsed[moduleType];
+  const labels = { task: '任务', inspiration: '灵感', apply: '申请', expense: '报销' };
+  return `已为您创建${labels[moduleType] || '记录'}：${data.title || ''}`;
+}
+
+module.exports = function (db) {
+  const router = express.Router();
+
+  // ===== 核心：AI 对话接口（支持 session_id + 数据库查询） =====
+  router.post('/', async (req, res) => {
+    const { openid, msg, botId, files, history, session_id } = req.body;
+
+    if (!openid || !msg) {
+      return res.status(400).json({ success: false, error: '缺少 openid 或 msg' });
+    }
+
+    // 防御：拒绝空消息
+    const cleanMsg = (msg || '').trim();
+    if (!cleanMsg) {
+      return res.status(400).json({ success: false, error: '消息内容不能为空' });
+    }
+
+    // 自动分配或使用已有 session_id
+    const sid = session_id || genSessionId();
+
+    try {
+      // 构建消息历史
+      const messages = (history || []).map(h => ({
+        role: h.role,
+        content: h.content,
+      }));
+
+      // ===== 模块意图预检测 =====
+      const moduleIntent = detectModuleIntent(cleanMsg);
+      if (moduleIntent.moduleHint) {
+        messages.splice(1, 0, {
+          role: 'system',
+          content: `【模块提示】用户意图是创建"${moduleIntent.moduleLabel}"，这是 module="${moduleIntent.moduleHint}" 类型。请用对应的 ${moduleIntent.moduleHint} 对象返回，不要用 schedule。`
+        });
+      }
+
+      messages.push({ role: 'user', content: cleanMsg });
+
+      // 如果有文件，追加到消息中
+      if (files && files.length > 0) {
+        const fileInfo = files.map(f => `[文件: ${f}]`).join(', ');
+        messages[messages.length - 1].content += `\n附件: ${fileInfo}`;
+      }
+
+      // ===== 日程查询：检测意图并注入数据库内容 =====
+      const queryIntent = detectScheduleQuery(cleanMsg);
+      if (queryIntent) {
+        const rows = querySchedulesFromDb(db, openid, queryIntent);
+        const scheduleCtx = formatScheduleContext(rows, openid);
+        if (scheduleCtx) {
+          messages.splice(1, 0, { role: 'system', content: scheduleCtx });
+        }
+      }
+
+      // ===== 更新意图：注入最近日程上下文 =====
+      if (isUpdateIntent(cleanMsg)) {
+        const recentCtx = getRecentScheduleContext(db, openid);
+        if (recentCtx) {
+          messages.splice(1, 0, { role: 'system', content: recentCtx });
+        }
+      }
+
+      // 1. 调用豆包 API
+      let aiResult = null;
+      try {
+        aiResult = await doubao.chat(messages);
+      } catch (err) {
+        console.error('[Chat] 豆包调用失败，降级到规则引擎:', err.message);
+      }
+
+      let replyText = '';
+      let draftSchedule = null;
+      let resultModule = 'schedule';
+      let resultData = null;
+
+      if (aiResult) {
+        replyText = aiResult.text;
+        resultModule = aiResult.module || 'schedule';
+        if (aiResult.schedule) {
+          draftSchedule = aiResult.schedule;
+        }
+      }
+
+      // 处理非日程模块：直接在服务端创建
+      if (aiResult && aiResult.type === 'create' && resultModule !== 'schedule') {
+        const created = handleModuleCreate(db, openid, resultModule, aiResult);
+        if (created) {
+          resultData = created;
+          if (!replyText) {
+            replyText = createSuccessReply(resultModule, aiResult);
+          }
+        }
+      }
+
+      // 如果是更新类型，服务端自动执行更新
+      if (aiResult && aiResult.type === 'update' && draftSchedule) {
+        const updatedSchedule = handleScheduleUpdate(db, openid, draftSchedule);
+        if (updatedSchedule) {
+          draftSchedule = updatedSchedule;
+        } else {
+          aiResult.type = 'chat';
+          draftSchedule = null;
+          if (replyText) {
+            replyText = replyText + '\n\n（未找到最近的日程，请先创建一个日程）';
+          }
+        }
+      }
+
+      // 如果没有任何回复，给默认消息
+      if (!replyText) {
+        replyText = '收到您的消息，但我不太确定如何帮您。可以尝试描述您的日程，例如"明天下午3点开会"。';
+      }
+
+      // 保存聊天历史（带 session_id）
+      try {
+        const insertHistory = db.prepare(`
+          INSERT INTO chat_history (openid, role, content, result_type, result_data, session_id)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `);
+        insertHistory.run(openid, 'user', cleanMsg, null, null, sid);
+        const historyType = resultData ? resultModule : (draftSchedule ? (aiResult?.type === 'update' ? 'schedule_updated' : 'schedule') : 'chat');
+        insertHistory.run(
+          openid, 'assistant', replyText,
+          historyType,
+          resultData ? JSON.stringify(resultData) : (draftSchedule ? JSON.stringify(draftSchedule) : null),
+          sid
+        );
+      } catch (err) {
+        console.error('[Chat] 历史记录保存失败:', err.message);
+      }
+
+      res.json({
+        success: true,
+        data: {
+          text: replyText,
+          schedule: resultModule === 'schedule' ? draftSchedule : null,
+          module: resultModule,
+          task: resultModule === 'task' ? resultData : null,
+          inspiration: resultModule === 'inspiration' ? resultData : null,
+          apply: resultModule === 'apply' ? resultData : null,
+          expense: resultModule === 'expense' ? resultData : null,
+          type: aiResult?.type === 'update' ? 'update' : (draftSchedule ? 'schedule' : 'chat'),
+          usage: aiResult?.usage || null,
+          session_id: sid,
+        },
+      });
+    } catch (err) {
+      console.error('[Chat] 处理失败:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ===== 获取会话列表 =====
+  router.get('/sessions', (req, res) => {
+    const { openid } = req.query;
+    if (!openid) return res.status(400).json({ success: false, error: '缺少 openid' });
+
+    try {
+      const sessions = db.prepare(`
+        SELECT session_id as id,
+               MIN(created_at) as created_at,
+               MAX(created_at) as updated_at,
+               COUNT(*) as msg_count,
+               (SELECT content FROM chat_history WHERE session_id = ch.session_id AND role = 'user' ORDER BY created_at ASC LIMIT 1) as title
+        FROM chat_history ch
+        WHERE openid = ? AND session_id != ''
+        GROUP BY session_id
+        ORDER BY updated_at DESC
+      `).all(openid);
+
+      res.json({ success: true, data: sessions });
+    } catch (err) {
+      console.error('[Chat] 获取会话列表失败:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ===== 获取某个会话的聊天历史 =====
+  router.get('/history', (req, res) => {
+    const { openid, session_id, pageSize = 50, pageNumber = 1 } = req.query;
+    if (!openid) return res.status(400).json({ success: false, error: '缺少 openid' });
+
+    try {
+      const offset = (parseInt(pageNumber) - 1) * parseInt(pageSize);
+      const limit = parseInt(pageSize);
+
+      let totalRow, rows;
+      if (session_id) {
+        totalRow = db.prepare('SELECT COUNT(*) as total FROM chat_history WHERE openid = ? AND session_id = ?').get(openid, session_id);
+        rows = db.prepare(`
+          SELECT id, role, content, result_type, result_data, session_id, created_at
+          FROM chat_history WHERE openid = ? AND session_id = ?
+          ORDER BY created_at ASC LIMIT ? OFFSET ?
+        `).all(openid, session_id, limit, offset);
+      } else {
+        totalRow = db.prepare('SELECT COUNT(*) as total FROM chat_history WHERE openid = ?').get(openid);
+        rows = db.prepare(`
+          SELECT id, role, content, result_type, result_data, session_id, created_at
+          FROM chat_history WHERE openid = ?
+          ORDER BY created_at DESC LIMIT ? OFFSET ?
+        `).all(openid, limit, offset);
+      }
+
+      const data = rows.map(row => {
+        let resultData = null;
+        if (row.result_data) {
+          try { resultData = JSON.parse(row.resultData || row.result_data); } catch { }
+        }
+        return {
+          id: row.id,
+          role: row.role,
+          content: row.content,
+          resultType: row.result_type,
+          resultData,
+          sessionId: row.session_id,
+          createdAt: row.created_at,
+        };
+      });
+
+      // 非 session 查询时保持 DESC（前端可能用 reverse），session 查询返回 ASC 直接使用
+      res.json({
+        success: true,
+        data: session_id ? data : data.reverse(),
+        total: totalRow.total,
+        pageNumber: parseInt(pageNumber),
+        pageSize: limit,
+      });
+    } catch (err) {
+      console.error('[Chat] 获取历史失败:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ===== 删除整个会话 =====
+  router.delete('/session/:sessionId', (req, res) => {
+    const { sessionId } = req.params;
+    const { openid } = req.body;
+
+    if (!openid || !sessionId) {
+      return res.status(400).json({ success: false, error: '缺少参数' });
+    }
+
+    try {
+      const result = db.prepare('DELETE FROM chat_history WHERE openid = ? AND session_id = ?').run(openid, sessionId);
+      res.json({ success: true, data: { deleted: result.changes } });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ===== 语音转文字（降级方案） =====
+  // 当微信 WechatSI 插件不可用时，上传音频到服务器做 ASR
+  router.post('/speech', (req, res) => {
+    // 需要 multer 解析文件上传
+    // 这里使用腾讯云 ASR 服务
+    const asrOcr = require('../services/asr-ocr');
+
+    // multer 中间件已在 index.js 挂载，这里需要单独处理
+    // 如果在 index.js 中挂载了 multer，文件会在 req.file 中
+    res.json({
+      success: false,
+      error: '语音识别请使用微信语音插件，更稳定更快速',
+    });
+  });
+
+  // ===== 流式 AI 对话（实时逐字输出 + 数据库查询） =====
+  router.post('/stream', async (req, res) => {
+    const { openid, msg, history, session_id } = req.body;
+
+    if (!openid || !msg) {
+      return res.status(400).json({ success: false, error: '缺少 openid 或 msg' });
+    }
+
+    // 防御：拒绝保存空消息（trim 后空字符串）
+    const cleanMsg = (msg || '').trim();
+    if (!cleanMsg) {
+      return res.status(400).json({ success: false, error: '消息内容不能为空' });
+    }
+
+    const sid = session_id || genSessionId();
+
+    // 构建消息历史
+    const messages = (history || []).map(h => ({
+      role: h.role,
+      content: h.content,
+    }));
+
+    // ===== 模块意图预检测：注入模块提示到系统消息 =====
+    const moduleIntent = detectModuleIntent(cleanMsg);
+    if (moduleIntent.moduleHint) {
+      messages.splice(1, 0, {
+        role: 'system',
+        content: `【模块提示】用户意图是创建"${moduleIntent.moduleLabel}"，这是 module="${moduleIntent.moduleHint}" 类型。请用对应的 ${moduleIntent.moduleHint} 对象返回，不要用 schedule。`
+      });
+    }
+
+    messages.push({ role: 'user', content: cleanMsg });
+
+    // ===== 日程查询：检测意图并注入数据库内容 =====
+    const queryIntent = detectScheduleQuery(cleanMsg);
+    if (queryIntent) {
+      const rows = querySchedulesFromDb(db, openid, queryIntent);
+      const scheduleCtx = formatScheduleContext(rows, openid);
+      if (scheduleCtx) {
+        messages.splice(1, 0, { role: 'system', content: scheduleCtx });
+      }
+    }
+
+    // ===== 更新意图：注入最近日程上下文 =====
+    if (isUpdateIntent(cleanMsg)) {
+      const recentCtx = getRecentScheduleContext(db, openid);
+      if (recentCtx) {
+        messages.splice(1, 0, { role: 'system', content: recentCtx });
+      }
+    }
+
+    // 保存用户消息
+    try {
+      const insertHistory = db.prepare(
+        'INSERT INTO chat_history (openid, role, content, result_type, result_data, session_id) VALUES (?, ?, ?, ?, ?, ?)'
+      );
+      insertHistory.run(openid, 'user', cleanMsg, null, null, sid);
+    } catch (err) {
+      console.error('[Chat/Stream] 保存用户消息失败:', err.message);
+    }
+
+    // SSE 响应头
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+
+    let fullText = '';
+    let doubaoUsage = null;
+
+    try {
+      const stream = await doubao.chatStream(messages, { maxTokens: 1024 });
+
+      // 收集 SSE chunks 并解析文本
+      let buffer = '';
+      stream.on('data', (chunk) => {
+        buffer += chunk.toString();
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // 保留不完整的行
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const dataStr = line.slice(6).trim();
+          if (dataStr === '[DONE]') continue;
+          try {
+            const json = JSON.parse(dataStr);
+            const delta = json.choices?.[0]?.delta;
+            // 豆包直接输出 content，无 reasoning_content
+            if (delta?.content) {
+              fullText += delta.content;
+              res.write(`data: ${JSON.stringify({ chunk: delta.content })}\n\n`);
+            }
+            if (json.usage) doubaoUsage = json.usage;
+          } catch (e) { /* 跳过无法解析的行 */ }
+        }
+      });
+
+      stream.on('end', () => {
+        // 处理剩余 buffer
+        if (buffer.startsWith('data: ')) {
+          const dataStr = buffer.slice(6).trim();
+          if (dataStr !== '[DONE]') {
+            try {
+              const json = JSON.parse(dataStr);
+              if (json.usage) doubaoUsage = json.usage;
+            } catch (e) { /* ignore */ }
+          }
+        }
+        sendFinalResult(res, fullText, sid, db, openid, doubaoUsage);
+      });
+
+      stream.on('error', (err) => {
+        console.error('[Chat/Stream] 流读取错误:', err.message);
+        if (fullText) {
+          sendFinalResult(res, fullText, sid, db, openid, doubaoUsage);
+        } else {
+          res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+          res.end();
+        }
+      });
+    } catch (err) {
+      console.error('[Chat/Stream] 豆包调用失败:', err.message);
+      // 降级：直接返回规则引擎兜底
+      const fallbackText = '收到您的消息，但我不太确定如何帮您。可以尝试描述您的日程，例如"明天下午3点开会"。';
+      res.write(`data: ${JSON.stringify({ chunk: fallbackText })}\n\n`);
+      sendFinalResult(res, fallbackText, sid, db, openid, null);
+    }
+  });
+
+  // ===== AI 结构化解析（用于差异化弹窗表单） =====
+  router.post('/parse', async (req, res) => {
+    const { messages } = req.body;
+
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ success: false, error: '缺少 messages 参数或格式错误' });
+    }
+
+    try {
+      const parseSystemPrompt = doubao.PARSE_PROMPT.replace(
+        '{{CURRENT_DATE}}',
+        new Date().toISOString().slice(0, 10)
+      );
+
+      // 使用 PARSE_PROMPT 调用豆包，获取结构化JSON
+      const response = await doubao.chat(messages, {
+        maxTokens: 512,
+        temperature: 0.3,
+        systemPrompt: parseSystemPrompt
+      });
+
+      // doubao.chat() 内部会尝试用旧格式解析，新格式字段匹配不上时 text 字段是原始 AI 响应
+      let text = '';
+      if (typeof response === 'string') {
+        text = response;
+      } else if (response?.text) {
+        text = response.text; // doubao.chat() 返回的 text 字段
+      } else if (response?.choices?.[0]?.message?.content) {
+        text = response.choices[0].message.content;
+      } else {
+        text = JSON.stringify(response);
+      }
+
+      // 尝试从文本中提取 JSON
+      let parsed;
+      try {
+        // 先尝试直接解析
+        parsed = JSON.parse(text.trim());
+      } catch (e1) {
+        // 尝试从```json ... ```中提取
+        const codeMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+        if (codeMatch) {
+          try {
+            parsed = JSON.parse(codeMatch[1].trim());
+          } catch (e2) {
+            const braceMatch = text.match(/\{[\s\S]*\}/);
+            if (braceMatch) {
+              try {
+                parsed = JSON.parse(braceMatch[0].trim());
+              } catch (e3) {
+                console.error('[Parse] JSON解析失败，原始文本:', text.slice(0, 200));
+                return res.json({ success: false, error: 'AI返回格式异常，请重试', raw: text.slice(0, 300) });
+              }
+            }
+          }
+        } else {
+          const braceMatch = text.match(/\{[\s\S]*\}/);
+          if (braceMatch) {
+            try {
+              parsed = JSON.parse(braceMatch[0].trim());
+            } catch (e3) {
+              console.error('[Parse] JSON解析失败，原始文本:', text.slice(0, 200));
+              return res.json({ success: false, error: 'AI返回格式异常，请重试', raw: text.slice(0, 300) });
+            }
+          } else {
+            console.error('[Parse] 未找到JSON，原始文本:', text.slice(0, 200));
+            return res.json({ success: false, error: 'AI未返回有效JSON', raw: text.slice(0, 300) });
+          }
+        }
+      }
+
+      // 标准化字段
+      const result = {
+        target_module: parsed.target_module || 'task',
+        title: (parsed.title || '').slice(0, 50),
+        content: parsed.content || '',
+        start_time: parsed.start_time === 'null' ? null : (parsed.start_time || null),
+        end_time: parsed.end_time === 'null' ? null : (parsed.end_time || null),
+        deadline: parsed.deadline === 'null' ? null : (parsed.deadline || null),
+        amount: parsed.amount ? Number(parsed.amount) : null,
+      };
+
+      console.log('[Parse] 解析成功:', JSON.stringify(result));
+      res.json({ success: true, data: result });
+    } catch (err) {
+      console.error('[Parse] 解析失败:', err.message);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ===== 快速草稿：从自然语言创建一个草稿（供首页快捷输入） =====
+  router.post('/draft', async (req, res) => {
+    const { text, source_type, openid = 'default' } = req.body;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({ success: false, error: '缺少 text 参数' });
+    }
+
+    try {
+      const parseSystemPrompt = doubao.PARSE_PROMPT.replace(
+        '{{CURRENT_DATE}}',
+        new Date().toISOString().slice(0, 10)
+      );
+
+      const messages = [{ role: 'user', content: text }];
+      const response = await doubao.chat(messages, {
+        maxTokens: 512,
+        temperature: 0.3,
+        systemPrompt: parseSystemPrompt
+      });
+
+      let responseText = '';
+      if (typeof response === 'string') {
+        responseText = response;
+      } else if (response?.text) {
+        responseText = response.text;
+      } else if (response?.choices?.[0]?.message?.content) {
+        responseText = response.choices[0].message.content;
+      } else {
+        responseText = JSON.stringify(response);
+      }
+
+      // 尝试从文本中提取 JSON
+      let parsed;
+      try {
+        parsed = JSON.parse(responseText.trim());
+      } catch (e1) {
+        const codeMatch = responseText.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+        if (codeMatch) {
+          try {
+            parsed = JSON.parse(codeMatch[1].trim());
+          } catch (e2) {
+            const braceMatch = responseText.match(/\{[\s\S]*\}/);
+            if (braceMatch) {
+              try {
+                parsed = JSON.parse(braceMatch[0].trim());
+              } catch (e3) {
+                return res.json({ success: false, error: 'AI返回格式异常，请重试' });
+              }
+            }
+          }
+        } else {
+          const braceMatch = responseText.match(/\{[\s\S]*\}/);
+          if (braceMatch) {
+            try {
+              parsed = JSON.parse(braceMatch[0].trim());
+            } catch (e3) {
+              return res.json({ success: false, error: 'AI返回格式异常，请重试' });
+            }
+          }
+        }
+      }
+
+      if (!parsed) {
+        return res.json({ success: false, error: 'AI返回格式异常，请重试' });
+      }
+
+      // 规范化时间格式（AI 可能返回 "2026-08-05 15:00" 而非 ISO 8601）
+      const normTime = (t) => {
+        if (!t || t === 'null') return null;
+        let ts = String(t).trim().replace(' ', 'T');
+        if (ts.length === 10) ts += 'T00:00:00';
+        if (!ts.includes('Z') && !ts.includes('+') && ts.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)) ts += ':00.000Z';
+        return ts;
+      };
+
+      const targetModule = parsed.target_module || 'schedule';
+
+      // 必填项兜底提示：若AI未返回ai_hint，后端根据规则补充
+      let aiHint = parsed.ai_hint || null;
+      if (!aiHint) {
+        if (targetModule === 'schedule' && !normTime(parsed.start_time)) {
+          aiHint = '日程缺少开始时间，请补充';
+        } else if (targetModule === 'task' && !normTime(parsed.deadline)) {
+          aiHint = '任务缺少截止时间，请补充';
+        } else if (targetModule === 'apply' && !normTime(parsed.start_time)) {
+          aiHint = '申请缺少开始时间，请补充';
+        } else if (targetModule === 'expense' && !(parsed.amount || parsed.amount === 0)) {
+          aiHint = '报销缺少金额，请补充';
+        } else if (!parsed.title?.trim()) {
+          aiHint = '请输入标题';
+        }
+      }
+
+      const draft = {
+        id: Date.now(),
+        openid,
+        raw_content: text,
+        source_type: source_type || 'text',
+        parsed_title: (parsed.title || '').slice(0, 50),
+        parsed_content: parsed.content || '',
+        start_time: normTime(parsed.start_time),
+        end_time: normTime(parsed.end_time),
+        deadline: normTime(parsed.deadline),
+        target_module: targetModule,
+        amount: parsed.amount ? Number(parsed.amount) : null,
+        type: parsed.type || 'event',
+        priority: parsed.priority || 'medium',
+        location: parsed.location || '',
+        person: parsed.person || '',
+        ai_hint: aiHint,
+        status: 'draft',
+        created_at: new Date().toISOString(),
+      };
+
+      console.log('[Draft] 创建成功:', draft.parsed_title, '→', draft.target_module);
+      res.json({ success: true, data: draft });
+    } catch (err) {
+      console.error('[Draft] 创建失败:', err.message);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ===== 统一创建接口（根据module路由到对应表） =====
+  router.post('/create', async (req, res) => {
+    const { openid, module: moduleType, title, content, start_time, end_time, deadline, amount } = req.body;
+
+    if (!openid || !moduleType || !title) {
+      return res.status(400).json({ success: false, error: '缺少 openid、module 或 title' });
+    }
+
+    try {
+      let result;
+
+      switch (moduleType) {
+        case 'schedule': {
+          if (!start_time) {
+            return res.status(400).json({ success: false, error: '日程必须提供开始时间' });
+          }
+          const stmt = db.prepare(
+            'INSERT INTO schedules (openid, title, description, start_time, end_time, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+          );
+          result = stmt.run(openid, title, content || '', start_time, end_time || start_time, 'pending', new Date().toISOString());
+          break;
+        }
+        case 'task': {
+          const stmt = db.prepare(
+            'INSERT INTO tasks (openid, title, description, priority, due_date, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+          );
+          result = stmt.run(openid, title, content || '', 'medium', deadline || null, 'pending', new Date().toISOString());
+          break;
+        }
+        case 'inspiration': {
+          const stmt = db.prepare(
+            'INSERT INTO inspirations (openid, title, description, created_at) VALUES (?, ?, ?, ?)'
+          );
+          result = stmt.run(openid, title, content || '', new Date().toISOString());
+          break;
+        }
+        case 'apply': {
+          const stmt = db.prepare(
+            'INSERT INTO applications (openid, title, description, expected_time, status, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+          );
+          result = stmt.run(openid, title, content || '', deadline || null, 'pending', new Date().toISOString());
+          break;
+        }
+        case 'expense': {
+          const stmt = db.prepare(
+            'INSERT INTO expenses (openid, title, description, amount, expense_date, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+          );
+          result = stmt.run(openid, title, content || '', amount || 0, deadline || null, 'pending', new Date().toISOString());
+          break;
+        }
+        default:
+          return res.status(400).json({ success: false, error: `未知模块类型: ${moduleType}` });
+      }
+
+      res.json({ success: true, data: { id: result.lastInsertRowid, module: moduleType } });
+    } catch (err) {
+      console.error('[Create] 创建失败:', err.message);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ===== 文件解析（可选） =====
+  router.post('/files', async (req, res) => {
+    const { openid, fileUrl, fileName, fileType } = req.body;
+
+    if (!openid || !fileUrl) {
+      return res.status(400).json({ success: false, error: '缺少参数' });
+    }
+
+    try {
+      res.json({
+        success: true,
+        data: {
+          message: '文件已接收',
+          fileUrl,
+          fileName,
+          fileType,
+        },
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  return router;
+};
+
+

@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>新增数据 - 表单录入</title>
+<script src="assets/js/auth-guard.js?v=5"></script>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background:#f0f2f5; min-height:100vh; display:flex; justify-content:center; padding:32px 16px; }
+  .container { width:100%; max-width:720px; }
+  
+  .card { background:#fff; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,0.06); padding:32px; margin-bottom:20px; }
+  .card-header { margin-bottom:24px; }
+  .card-header h1 { font-size:22px; color:#1a1a2e; font-weight:700; }
+  .card-header p { font-size:13px; color:#8b8b9e; margin-top:6px; }
+  .card-header .table-badge { display:inline-block; background:#eef2ff; color:#4f6ef7; font-size:13px; font-weight:600; padding:3px 10px; border-radius:6px; margin-top:8px; }
+
+  label { display:block; font-size:13px; font-weight:600; color:#3a3a4e; margin-bottom:5px; }
+  label .required { color:#e74c3c; margin-left:2px; }
+
+  input, select, textarea {
+    width:100%; padding:10px 14px; border:1.5px solid #e0e0ea; border-radius:8px;
+    font-size:14px; color:#1a1a2e; background:#fafbfc; transition:border-color .2s, box-shadow .2s;
+    font-family: inherit; outline:none;
+  }
+  input:focus, select:focus, textarea:focus { border-color:#4f6ef7; box-shadow:0 0 0 3px rgba(79,110,247,0.1); background:#fff; }
+  input:disabled, select:disabled, textarea:disabled { background:#f0f1f5; color:#9a9aae; cursor:not-allowed; }
+  textarea { resize:vertical; min-height:80px; }
+  
+  .form-group { margin-bottom:18px; }
+  .form-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .form-row .form-group { margin-bottom:0; }
+  @media (max-width:600px) { .form-row { grid-template-columns:1fr; } }
+
+  .btn-row { display:flex; gap:12px; margin-top:28px; }
+  .btn { flex:1; padding:12px 20px; border:none; border-radius:8px; font-size:15px; font-weight:600; cursor:pointer; transition:all .2s; }
+  .btn-primary { background:#4f6ef7; color:#fff; }
+  .btn-primary:hover { background:#3b5de7; }
+  .btn-secondary { background:#f0f1f5; color:#5a5a6e; }
+  .btn-secondary:hover { background:#e4e5ee; }
+  .btn:disabled { opacity:0.5; cursor:not-allowed; }
+
+  .toast { position:fixed; top:20px; left:50%; transform:translateX(-50%); padding:12px 24px; border-radius:8px; font-size:14px; font-weight:600; z-index:9999; animation:fadeIn .3s ease; }
+  .toast-success { background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }
+  .toast-error { background:#fef2f2; color:#991b1b; border:1px solid #fecaca; }
+  @keyframes fadeIn { from{opacity:0;transform:translateX(-50%) translateY(-10px);} to{opacity:1;transform:translateX(-50%) translateY(0);} }
+
+  .back-link { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:#4f6ef7; text-decoration:none; margin-bottom:16px; }
+  .back-link:hover { text-decoration:underline; }
+
+  .empty-state { text-align:center; padding:60px 20px; color:#8b8b9e; }
+  .empty-state svg { width:64px; height:64px; margin-bottom:16px; opacity:0.4; }
+  .empty-state h3 { font-size:16px; color:#5a5a6e; margin-bottom:8px; }
+  .empty-state p { font-size:13px; }
+.file-drop-zone{border:2px dashed #d0d5dd;border-radius:12px;padding:28px 20px;text-align:center;cursor:pointer;transition:all .3s;background:#fafbfc;margin-bottom:20px}
+.file-drop-zone:hover,.file-drop-zone.drag-over{border-color:#4f6ef7;background:#eef2ff}
+.file-drop-zone.drag-over{transform:scale(1.01);box-shadow:0 0 0 3px rgba(79,110,247,.12)}
+.file-drop-zone .drop-icon svg{width:44px;height:44px;color:#4f6ef7}
+.file-drop-zone .drop-title{font-size:15px;font-weight:600;color:#1a1a2e;margin:8px 0 4px}
+.file-drop-zone .drop-subtitle{font-size:12px;color:#8b8b9e}
+.file-drop-zone.loading{pointer-events:none;opacity:.8}
+.file-drop-zone.has-data{border-style:solid;border-color:#22c55e;background:#f0fdf4}
+.parse-status{margin-top:14px}
+.spinner{width:20px;height:20px;border:2.5px solid #e0e0e0;border-top-color:#4f6ef7;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.parse-loading,.parse-success{display:flex;align-items:center;justify-content:center;gap:10px;font-size:13px}
+.parse-loading{color:#4f6ef7}.parse-success{color:#16a34a}
+.btn-clear-fill{background:none;border:1px solid #22c55e;color:#22c55e;padding:3px 10px;border-radius:5px;cursor:pointer;font-size:12px}
+.btn-clear-fill:hover{background:#22c55e;color:#fff}
+.parse-error{color:#ef4444;font-size:13px}
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="table.html" class="back-link" id="backLink">← 返回表格</a>
+  <div class="card">
+    <div class="card-header">
+      <h1 id="pageTitle">新增数据记录</h1>
+      <p id="pageDesc">正在加载...</p>
+      <span class="table-badge" id="tableBadge" style="display:none;"></span>
+    </div>
+    
+    <div class="file-drop-zone" id="fileDropZone">
+      <div class="drop-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+      <p class="drop-title">拖拽 Excel/CSV 文件到此处，自动解析填写</p>
+      <p class="drop-subtitle">支持 .xlsx · .xls · .csv（第一行为列名，将自动匹配表单字段）</p>
+      <input type="file" id="fileInput" accept=".xls,.xlsx,.csv" hidden>
+      <div class="parse-status" id="parseStatus">
+        <div class="parse-loading" id="parseLoading" style="display:none"><div class="spinner"></div><span>正在解析文件内容...</span></div>
+        <div class="parse-success" id="parseSuccess" style="display:none"><span>已提取 <strong id="parseCount">0</strong> 个字段</span><button type="button" class="btn-clear-fill" onclick="clearAutoFill()">清除自动填充</button></div>
+        <div class="parse-error" id="parseError" style="display:none"></div>
+      </div>
+    </div>
+    <form id="dataForm" style="display:none;">
+      <div id="formFields"></div>
+      <div class="btn-row">
+        <button type="button" class="btn btn-secondary" onclick="resetForm()">重置</button>
+        <button type="submit" class="btn btn-primary">提交数据</button>
+      </div>
+    </form>
+    
+    <div id="errorState" class="empty-state" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/>
+      </svg>
+      <h3 id="errorTitle">无法加载表单</h3>
+      <p id="errorMsg"></p>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="assets/js/xlsx.full.min.js"></script>
+<script src="assets/js/main.js?v=3"></script>
+<script src="assets/js/file_drop.js?v=3"></script>
+<script>
+// ===== [内置表结构] 所有表的 headers，不依赖 localStorage =====
+var TABLE_META = {
+  "销售表": {
+    headers: ["订单编号","订单日期","订购单位","开票单位","开票内容","订单金额","服务费","开票金额"]
+  },
+  "采购成本表_2023": {
+    headers: ["序号","订单编号","订单日期","订购单位","开票单位","开票内容","订单金额","服务费","开票金额","税率","税额","成本价格","毛利润","备注"]
+  },
+  "采购成本表_2024": {
+    headers: ["序号","订单编号","订单日期","订购单位","开票单位","开票内容","订单金额","服务费","开票金额","税率","税额","成本价格","毛利润","备注"]
+  },
+  "采购成本表_2025": {
+    headers: ["序号","订单编号","订单日期","订购单位","开票单位","开票内容","订单金额","服务费","开票金额","税率","税额","成本价格","毛利润","备注"]
+  },
+  "收款表": {
+    headers: ["编号","订单编号","单品编码","订单日期","收料单位","供应商名称","订单小计（含税）","折扣率","服务费","开票金额","实收金额","成本小计（含税）","毛利","税率","税额","净收入","回款金额","回款日期","备注"]
+  },
+  "费用表": {
+    headers: ["编号","订单编号","订单日期","收料单位","单品编码","报销日期","物流费","搬运费","安装费","业务费","招待费","交通费","住宿费","误餐费","借支","其他","备注","费用小计","报销人","审批人"]
+  },
+  "利润表": {
+    headers: ["编号","订单编号","订单日期","收料单位","单品编码","净收入","费用小计","利润","业绩归属"]
+  },
+  "承包确认单": {
+    headers: ["月份","姓名","总利润","承包费","助理工资","补助","应得","备注"]
+  },
+  "客户统计表": {
+    headers: ["编号","订单编号","订单日期","收料单位","单品编码","下单姓名","下单人职务","下单人电话","收货人","收货人联系方式","收货地址","客户分级","备注"]
+  },
+  "每日流水": {
+    headers: ["日期","订单编号","分类","费用明细","支出","收入","银行余额","备注"]
+  },
+  "平台结算折扣率": {
+    headers: ["平台名称","结算周期","折扣率","备注"]
+  }
+};
+
+// ===== 所有销售表月度表共享同一表头 =====
+(function() {
+  var saleHeaders = TABLE_META["销售表"].headers;
+  // 年度表
+  ["2022","2023","2024"].forEach(function(y) {
+    TABLE_META["销售表_" + y] = { headers: saleHeaders };
+  });
+  // 月度表 (2025-1 到 2026-12)
+  for (var yr = 2025; yr <= 2026; yr++) {
+    for (var m = 1; m <= 12; m++) {
+      TABLE_META["销售表_" + yr + "-" + m] = { headers: saleHeaders };
+    }
+  }
+  TABLE_META["得力"] = { headers: saleHeaders };
+  TABLE_META["特殊订单汇总表"] = { headers: saleHeaders };
+  TABLE_META["未下单统计表"] = { headers: saleHeaders };
+})();
+
+var STORAGE_KEY = 'buqin_multi_table_v2';
+var SERVER_SYNC_URL = '/api/tables';
+var ALL_TABLE_ROWS = {};   // 只存 rows
+var currentTable = '';     // 由 URL 参数 ?table=xxx 绑定
+var editIndex = -1;        // 编辑模式：行索引（>=0 为编辑，-1 为新增）
+
+// ===== [工具函数] =====
+
+function showToast(msg, type) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast toast-' + (type || 'success');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function() { t.className = ''; t.textContent = ''; }, 3000);
+}
+
+// ===== [数据加载] =====
+function loadData(callback) {
+  var saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    try {
+      var parsed = JSON.parse(saved);
+      for (var k in parsed) {
+        if (TABLE_META[k]) {
+          ALL_TABLE_ROWS[k] = parsed[k].rows || [];
+        }
+      }
+    } catch(e) { /* ignore */ }
+  }
+
+  // 补充缺失的表
+  for (var tn in TABLE_META) {
+    if (!ALL_TABLE_ROWS[tn]) ALL_TABLE_ROWS[tn] = [];
+  }
+
+  // 尝试从服务器拉取，完成后再回调
+  fetchFromServerThen(callback);
+}
+
+function fetchFromServerThen(callback) {
+  fetch(SERVER_SYNC_URL + '/version')
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(versions) {
+      if (!versions) return null;
+      return fetch(SERVER_SYNC_URL).then(function(r) { return r.json(); });
+    })
+    .then(function(serverData) {
+      if (!serverData) return;
+      for (var tn in serverData) {
+        if (TABLE_META[tn] && serverData[tn].rows) {
+          ALL_TABLE_ROWS[tn] = serverData[tn].rows;
+        }
+      }
+    })
+    .catch(function() { /* 静默失败 */ })
+    .finally(function() {
+      if (callback) callback();
+    });
+}
+
+// ===== [表单渲染] =====
+function renderForm() {
+  var form = document.getElementById('dataForm');
+  var error = document.getElementById('errorState');
+  var headers = TABLE_META[currentTable].headers;
+  var rows = ALL_TABLE_ROWS[currentTable] || [];
+
+  if (!headers || headers.length === 0) {
+    form.style.display = 'none';
+    showError('该表格暂无字段定义，请先配置字段。');
+    return;
+  }
+
+  var isEdit = (editIndex >= 0 && editIndex < rows.length);
+  var existingRow = isEdit ? rows[editIndex] : null;
+
+  // 更新页面标题和描述
+  if (isEdit) {
+    document.getElementById('pageTitle').textContent = '修改数据 - ' + currentTable;
+    document.getElementById('pageDesc').textContent = '正在编辑「' + currentTable + '」的第 ' + (editIndex + 1) + ' 条记录';
+    document.title = '修改数据 - 表单录入';
+  } else {
+    document.getElementById('pageTitle').textContent = '新增数据 - ' + currentTable;
+    document.getElementById('pageDesc').textContent = '为「' + currentTable + '」添加一条新记录';
+    document.title = '新增数据 - 表单录入';
+  }
+  var badge = document.getElementById('tableBadge');
+  badge.textContent = '当前表格：' + currentTable;
+  badge.style.display = '';
+  
+  // 更新返回链接，带回表格名参数
+  document.getElementById('backLink').href = 'table.html?table=' + encodeURIComponent(currentTable);
+
+  // 获取最大编号（仅在新增模式）
+  var maxNum = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var n = parseInt(rows[i]['编号'], 10);
+    if (n > maxNum) maxNum = n;
+  }
+
+  // 生成字段 HTML
+  var html = '';
+  for (var j = 0; j < headers.length; j++) {
+    var hdr = headers[j];
+    var existingVal = (isEdit && existingRow) ? (existingRow[hdr] || '') : '';
+    var isReadonly = false;
+
+    // "填表说明" 当作只读说明
+    if (hdr.indexOf('填表说明') === 0) {
+      html += '<div class="form-group" style="margin-top:20px;padding-top:16px;border-top:1px dashed #e0e0ea;">';
+      html += '<label style="font-size:12px;color:#8b8b9e;font-weight:400;">' + escapeHtml(hdr) + '</label>';
+      html += '<input type="text" name="' + j + '" data-header="' + escapeHtml(hdr) + '" disabled>';
+      html += '</div>';
+      continue;
+    }
+
+    html += '<div class="form-group">';
+    html += '<label>' + escapeHtml(hdr);
+    if (hdr === '编号') html += ' <span class="required">*</span>';
+    if (isReadonly) html += ' <span style="color:#8b8b9e;font-weight:400;font-size:12px;">（只读）</span>';
+    html += '</label>';
+
+    var isDate = (hdr.indexOf('日期') !== -1 && hdr !== '订单日期') || (hdr.indexOf('月份') !== -1);
+    var isNum = (hdr !== '编号') && (
+      hdr.indexOf('数量') !== -1 || hdr.indexOf('金额') !== -1 ||
+      hdr.indexOf('单价') !== -1 || hdr.indexOf('小计') !== -1 ||
+      hdr.indexOf('成本') !== -1 || hdr.indexOf('定金') !== -1 ||
+      hdr.indexOf('尾款') !== -1 || hdr.indexOf('税率') !== -1 ||
+      hdr.indexOf('税额') !== -1 || hdr.indexOf('费用') !== -1 ||
+      hdr.indexOf('利润') !== -1 || hdr.indexOf('收入') !== -1 ||
+      hdr.indexOf('支出') !== -1 || hdr.indexOf('余额') !== -1 ||
+      hdr.indexOf('净收入') !== -1 || hdr.indexOf('毛利') !== -1 ||
+      hdr.indexOf('折扣率') !== -1 || hdr.indexOf('服务费') !== -1 ||
+      hdr.indexOf('开票金额') !== -1 || hdr.indexOf('实收金额') !== -1 ||
+      hdr.indexOf('回款金额') !== -1 || hdr.indexOf('总利润') !== -1 ||
+      hdr.indexOf('承包费') !== -1 || hdr.indexOf('工资') !== -1 ||
+      hdr.indexOf('补助') !== -1 || hdr.indexOf('应得') !== -1 ||
+      hdr.indexOf('借支') !== -1
+    );
+    var isTextarea = (hdr.indexOf('备注') !== -1 || hdr.indexOf('地址') !== -1 ||
+                      hdr.indexOf('说明') !== -1 || hdr.indexOf('物流信息') !== -1);
+
+    // 编辑模式日期值格式化：使用统一 normalizeDate 处理所有日期格式
+    var dateVal = '';
+    if (isDate && existingVal) {
+      dateVal = normalizeDate(existingVal);
+    }
+
+    var attrs = ' name="' + j + '" data-header="' + escapeHtml(hdr) + '"';
+    if (isReadonly) attrs += ' readonly';
+
+    if (hdr === '编号') {
+      var numVal = isEdit ? escapeHtml(existingVal) : (maxNum + 1);
+      html += '<input type="text"' + attrs + ' value="' + numVal + '"' + (isReadonly ? '' : ' required') + '>';
+    } else if (isDate) {
+      html += '<input type="date"' + attrs + ' value="' + escapeHtml(dateVal) + '">';
+    } else if (isNum) {
+      html += '<input type="number" step="0.01"' + attrs + ' value="' + escapeHtml(existingVal) + '">';
+    } else if (isTextarea) {
+      html += '<textarea' + attrs + ' rows="3">' + escapeHtml(existingVal) + '</textarea>';
+    } else {
+      html += '<input type="text"' + attrs + ' value="' + escapeHtml(existingVal) + '">';
+    }
+
+    html += '</div>';
+  }
+
+  // 更新提交按钮文字
+  var submitBtn = document.getElementById('dataForm').querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.textContent = isEdit ? '更新数据' : '提交数据';
+
+  document.getElementById('formFields').innerHTML = html;
+  form.style.display = '';
+  error.style.display = 'none';
+}
+
+function showError(msg) {
+  var error = document.getElementById('errorState');
+  document.getElementById('errorMsg').textContent = msg;
+  error.style.display = '';
+  document.getElementById('dataForm').style.display = 'none';
+}
+
+// ===== [表单提交] =====
+document.getElementById('dataForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+
+  if (!currentTable) {
+    showToast('未绑定表格，请从表格页面重新进入', 'error');
+    return;
+  }
+
+  var isEdit = (editIndex >= 0);
+  var rows = ALL_TABLE_ROWS[currentTable] || [];
+  var formInputs = document.getElementById('formFields').querySelectorAll('input, textarea');
+  var record = {};
+  for (var i = 0; i < formInputs.length; i++) {
+    var inp = formInputs[i];
+    if (inp.disabled) continue;
+    var hdr = inp.getAttribute('data-header');
+    var val = inp.value.trim();
+    if (hdr.indexOf('日期') !== -1 && val && hdr !== '订单日期') { val = normalizeDate(val); }
+    record[hdr] = val;
+  }
+
+  // 验证编号：空则自动递增，重复则提示修改
+  if ('编号' in record) {
+    var bh = record['编号'];
+    if (!bh) {
+      // 编号为空：自动计算最大编号并递增
+      var maxNum = 0;
+      for (var k = 0; k < rows.length; k++) {
+        var n = parseInt(rows[k]['编号'], 10);
+        if (n > maxNum) maxNum = n;
+      }
+      bh = String(maxNum + 1);
+      record['编号'] = bh;
+    }
+    // 检查编号是否重复
+    for (var j = 0; j < rows.length; j++) {
+      if (isEdit && j === editIndex) continue;
+      if (String(rows[j]['编号'] || '').trim() === bh) {
+        showToast('编号 "' + bh + '" 已存在，请修改后重新提交', 'error');
+        return;
+      }
+    }
+  }
+
+  if (isEdit) {
+  // 编辑模式：保存原始编号用于服务端定位记录
+  var _oldBianhao = isEdit ? String((ALL_TABLE_ROWS[currentTable][editIndex] || {})["编号"] || "").trim() : "";
+    // 编辑模式：更新现有行
+    ALL_TABLE_ROWS[currentTable][editIndex] = record;
+  } else {
+    // 新增模式：追加新行
+    ALL_TABLE_ROWS[currentTable] = (ALL_TABLE_ROWS[currentTable] || []);
+    ALL_TABLE_ROWS[currentTable].push(record);
+  }
+
+  saveToLocal();
+  // 只推当前这条记录到服务器，不推全表
+  pushToServer(currentTable, [record], _oldBianhao);
+
+  showToast(isEdit ? '数据已更新' : '数据已成功添加到 ' + currentTable, 'success');
+  
+  if (isEdit) {
+    // 编辑完成后关闭当前页面
+    setTimeout(function() { window.close(); }, 1200);
+  } else {
+    // 提交后自动返回表格页面
+    setTimeout(function() {
+      window.location.href = 'table.html?table=' + encodeURIComponent(currentTable);
+    }, 800);
+  }
+});
+
+function saveToLocal() {
+  var toSave = {};
+  for (var k in TABLE_META) {
+    toSave[k] = { rows: ALL_TABLE_ROWS[k] || [] };
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+}
+
+function pushToServer(tableName, rows, oldBianhao) {
+  var record = rows[0] || {};
+  var retries = 0;
+  function handleError(err, status) {
+    if (status === 409) { showToast('编号已存在，请修改后重新提交', 'error'); return; }
+    console.warn('Server sync attempt ' + (retries+1) + ' failed:', err);
+    retries++;
+    if (retries < 3) { setTimeout(doSync, 2000); }
+    else { showToast('服务器同步失败，数据仅保存在本地，请稍后刷新页面重试', 'warning'); }
+  }
+  function doSync() {
+    var url, body, method;
+    if (oldBianhao) {
+      url = SERVER_SYNC_URL + '/' + encodeURIComponent(tableName) + '/sync';
+      body = JSON.stringify({ rows: rows, oldBianhao: oldBianhao });
+      method = 'POST';
+    } else {
+      url = SERVER_SYNC_URL + '/' + encodeURIComponent(tableName);
+      body = JSON.stringify(record);
+      method = 'POST';
+    }
+    fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: body })
+      .then(function(r) {
+        if (!r.ok) { return r.json().then(function(d){ throw { error: d.error || 'server error', status: r.status }; }); }
+        return r.json();
+      }).then(function(result) { console.log('Server ok:', result); })
+      .catch(function(err) { handleError(err, err.status); });
+  }
+  doSync();
+}
+
+function resetForm() {
+  if (currentTable) renderForm();
+}
+
+// ===== [初始化] =====
+function init() {
+  currentTable = getUrlParam('table');
+  var editParam = getUrlParam('edit');
+  if (editParam !== '') {
+    editIndex = parseInt(editParam, 10);
+    if (isNaN(editIndex) || editIndex < 0) editIndex = -1;
+  }
+
+  if (!currentTable) {
+    showError('缺少表格参数。请从表格页面通过「表单新增」按钮进入。');
+    document.getElementById('pageTitle').textContent = '错误';
+    document.getElementById('pageDesc').textContent = '';
+    return;
+  }
+
+  if (!TABLE_META[currentTable]) {
+    showError('未识别的表格名称：「' + currentTable + '」。请确认参数正确。');
+    document.getElementById('pageTitle').textContent = '错误';
+    document.getElementById('pageDesc').textContent = '';
+    return;
+  }
+
+  // 加载数据后渲染表单
+  loadData(function() {
+    renderForm(); initFileDrop();
+  });
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

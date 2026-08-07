@@ -1,0 +1,32 @@
+﻿鈼?injected env (7) from .env // tip: 鈱?auth for agents [www.vestauth.com]
+
+馃攧 姝ｅ湪鍒濆鍖栨祴璇曟湇鍔″櫒...
+
+  馃攲 娴嬭瘯鏈嶅姟鍣ㄥ惎鍔? http://localhost:65352
+
+鈺斺晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?鈺? 闃舵4锛氬伐浣滃彴棣栭〉 - 鑽夌 API 杩為€氭祴璇?   鈺?鈺氣晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+鈺愨晲鈺?鍦烘櫙1锛氭枃瀛楄緭鍏?鈫?鍒涘缓鑽夌 鈺愨晲鈺?
+[Doubao] 鍙戦€佽姹? { model: 'ep-20260802220359-7pm64', msgCount: 2 }
+[Doubao] 鍘熷鍝嶅簲: {"title":"涓庝骇鍝佸洟闃熻瘎瀹3鍔熻兘闇€姹?,"content":"鏄庡ぉ涓嬪崍3鐐逛笌浜у搧鍥㈤槦璇勫Q3鍔熻兘闇€姹?}
+[Drafts] 鍒涘缓鑽夌 id=47 source=text
+  鉁?1.1 鏂囧瓧鑽夌鍒涘缓鎴愬姛 (success=true)
+  鉁?1.2 杩斿洖鑽夌鏁版嵁鍖呭惈id
+  鉁?1.3 鑽夌鐘舵€?draft
+  鉁?1.4 source_type=text
+  馃摑 鑽夌ID: 47 
+
+鈺愨晲鈺?鍦烘櫙2锛氳闊?鈫?鍒涘缓鑽夌 鈺愨晲鈺?
+[Doubao] 鍙戦€佽姹? { model: 'ep-20260802220359-7pm64', msgCount: 2 }
+node : [Doubao] 璇锋眰澶辫触: 璇锋眰瓒呮椂
+    + CategoryInfo          : NotSpecified: ([Doubao] 璇锋眰澶辫触: 璇锋眰瓒呮椂:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[Drafts] AI 璋冪敤澶辫触: 璇锋眰瓒呮椂
+[Drafts] 鍒涘缓鑽夌 id=48 source=voice
+  鉁?2.1 璇煶鑽夌鍒涘缓鎴愬姛
+  鉁?2.2 鑽夌ID涓嶅悓浜庡満鏅?
+  鉁?2.3 source_type=voice
+  馃帳 璇煶鑽夌ID: 48 
+
+鈺愨晲鈺?鍦烘櫙3锛氬浘鐗囦笂浼?鈫?甯﹂檮浠惰崏绋?鈺愨晲鈺?
+[Doubao] 鍙戦€佽姹? { model: 'ep-20260802220359-7pm64', msgCount: 2 }

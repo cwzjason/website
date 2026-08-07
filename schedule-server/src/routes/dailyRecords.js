@@ -1,11 +1,11 @@
 /**
  * 【阶段3】每日记录路由 - 草稿归档 + AI高级分析
  * 独立链路，仅操作 daily_records 表 + 读取 drafts 表
- * AI底层调用 doubao.js，使用阶段2专用 System Prompt
+ * AI底层调用 deepseek.js，使用阶段2专用 System Prompt
  */
 const express = require('express');
 const router = express.Router();
-const { chat, DOUBAO_MODEL_PRO } = require('../services/doubao');
+const { chat, DEEPSEEK_MODEL_PRO } = require('../services/deepseek');
 
 // ===== 阶段2 AI高级分析 System Prompt =====
 const ANALYSIS_PROMPT = `你是办公事项高级分析助手。
@@ -28,7 +28,7 @@ async function aiAnalyze(content) {
   try {
     const result = await chat(
       [{ role: 'user', content }],
-      { systemPrompt: ANALYSIS_PROMPT, temperature: 0.3, maxTokens: 1024, model: DOUBAO_MODEL_PRO }
+      { systemPrompt: ANALYSIS_PROMPT, temperature: 0.3, maxTokens: 1024, model: DEEPSEEK_MODEL_PRO }
     );
     if (result && result.text) {
       try {
@@ -54,6 +54,101 @@ async function aiAnalyze(content) {
   return null;
 }
 
+/**
+ * 同步到对应模块表
+ * @returns 模块名，失败返回 null
+ */
+function syncToModule(db, openid, draftId, targetModule, fields) {
+  if (!targetModule || !openid) return null;
+  const { title, content, startTime, endTime, location, person, priority, deadline, amount } = fields;
+
+  // 本地时间格式化，避免 toISOString() 的 UTC 偏移问题
+  const nowLocal = () => {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  };
+
+  try {
+    switch (targetModule) {
+      // ---- 日程 ----
+      case 'schedule': {
+        const stmt = db.prepare(`
+          INSERT INTO schedules (title, description, start_time, end_time, type, priority, person, location, status, source_type, openid)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, '待办', 'draft', ?)
+        `);
+        stmt.run(
+          title, content || '',
+          startTime || nowLocal(),
+          endTime || '',
+          'event',
+          priority || 'medium',
+          person || '', location || '',
+          openid
+        );
+        console.log(`[DailyRecords→schedule] 已同步: "${title}"`);
+        return 'schedule';
+      }
+
+      // ---- 申请 ----
+      case 'apply': {
+        db.prepare(`
+          INSERT INTO applications (openid, draft_id, title, description, applicant, status)
+          VALUES (?, ?, ?, ?, ?, 'pending')
+        `).run(openid, draftId, title, content || '', person || '');
+        console.log(`[DailyRecords→applications] 已同步: "${title}"`);
+        return 'applications';
+      }
+
+      // ---- 任务 ----
+      case 'task': {
+        db.prepare(`
+          INSERT INTO tasks (openid, draft_id, title, description, priority, due_date, status)
+          VALUES (?, ?, ?, ?, ?, ?, 'pending')
+        `).run(
+          openid, draftId, title, content || '',
+          priority || 'medium',
+          deadline || endTime || ''
+        );
+        console.log(`[DailyRecords→tasks] 已同步: "${title}"`);
+        return 'tasks';
+      }
+
+      // ---- 灵感 ----
+      case 'inspiration': {
+        db.prepare(`
+          INSERT INTO inspirations (openid, draft_id, title, description, tags)
+          VALUES (?, ?, ?, ?, '')
+        `).run(openid, draftId, title, content || '');
+        console.log(`[DailyRecords→inspirations] 已同步: "${title}"`);
+        return 'inspirations';
+      }
+
+      // ---- 报销 ----
+      case 'expense': {
+        db.prepare(`
+          INSERT INTO expenses (openid, draft_id, title, description, amount, category, expense_date)
+          VALUES (?, ?, ?, ?, ?, '', ?)
+        `).run(
+          openid, draftId, title, content || '',
+          amount || 0,
+          startTime || nowLocal()
+        );
+        console.log(`[DailyRecords→expenses] 已同步: "${title}"`);
+        return 'expenses';
+      }
+
+      default:
+        // 未识别的模块，不操作
+        return null;
+    }
+  } catch (e) {
+    // 同步失败不影响每日记录保存
+    console.error(`[DailyRecords] 同步到 ${targetModule} 失败:`, e.message);
+    return null;
+  }
+}
+
 module.exports = function (db) {
 
   // ================================================================
@@ -61,7 +156,20 @@ module.exports = function (db) {
   // ================================================================
   router.post('/saveFromDraft', async (req, res) => {
     try {
-      const { openid, draft_id } = req.body;
+      const {
+        openid, draft_id,
+        // 前端直接传入的字段
+        target_module: reqTargetModule,
+        title: reqTitle,
+        content: reqContent,
+        start_time: reqStartTime,
+        end_time: reqEndTime,
+        deadline: reqDeadline,
+        amount: reqAmount,
+        location: reqLocation,
+        person: reqPerson,
+        priority: reqPriority,
+      } = req.body;
       if (!openid) return res.status(400).json({ success: false, error: '缺少openid' });
       if (!draft_id) return res.status(400).json({ success: false, error: '缺少draft_id' });
 
@@ -81,15 +189,23 @@ module.exports = function (db) {
         return res.status(404).json({ success: false, error: '草稿不存在、已删除或不属于当前用户' });
       }
 
-      // ③ 复制草稿数据，插入 daily_records
-      const title = draft.parsed_title || draft.raw_content?.slice(0, 50) || '';
-      const content = draft.parsed_content || draft.raw_content || '';
+      // ③ 优先用前端传入的字段，其次草稿数据
+      const title = reqTitle || draft.parsed_title || draft.raw_content?.slice(0, 50) || '';
+      const content = reqContent || draft.parsed_content || draft.raw_content || '';
       const attachments = draft.raw_file_url ? JSON.stringify([draft.raw_file_url]) : '[]';
+      const startTime = reqStartTime || draft.start_time || '';
+      const endTime = reqEndTime || draft.end_time || '';
+      const location = reqLocation || draft.location || '';
+      const person = reqPerson || draft.person || '';
+      const priority = reqPriority || draft.priority || '中';
 
       const info = db.prepare(
-        `INSERT INTO daily_records (openid, draft_id, title, content, attachments)
-         VALUES (?, ?, ?, ?, ?)`
-      ).run(openid, draft_id, title, content, attachments);
+        `INSERT INTO daily_records (openid, draft_id, title, content, attachments, priority, location, person, start_time, end_time)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        openid, draft_id, title, content, attachments,
+        priority, location, person, startTime, endTime
+      );
 
       const recordId = info.lastInsertRowid;
 
@@ -101,21 +217,30 @@ module.exports = function (db) {
       // ⑤ 调用阶段2 AI高级分析
       const aiResult = await aiAnalyze(content);
       const aiAnalysisJson = aiResult ? JSON.stringify(aiResult) : '';
-      const targetModule = aiResult?.suggest_module || null;
+      // 模块判定优先级：前端指定 > AI分析 > 草稿记录
+      const finalModule = reqTargetModule || aiResult?.suggest_module || draft.target_module || draft.user_selected_module || null;
 
       // 写入AI分析结果
       db.prepare(
         'UPDATE daily_records SET target_module = ?, ai_analysis = ?, updated_at = datetime(\'now\',\'localtime\') WHERE id = ?'
-      ).run(targetModule, aiAnalysisJson, recordId);
+      ).run(finalModule, aiAnalysisJson, recordId);
+
+      // ⑥ 同步到对应模块表
+      const syncResult = syncToModule(db, openid, draft_id, finalModule, {
+        title, content, startTime, endTime,
+        location, person, priority,
+        deadline: reqDeadline, amount: reqAmount,
+      });
 
       // 返回完整记录
       const record = db.prepare('SELECT * FROM daily_records WHERE id = ?').get(recordId);
 
-      console.log(`[DailyRecords] 草稿 id=${draft_id} → 每日记录 id=${recordId}  module=${targetModule || 'none'}`);
+      console.log(`[DailyRecords] 草稿 id=${draft_id} → 每日记录 id=${recordId}  module=${finalModule || 'none'}  sync=${syncResult || 'none'}`);
       res.json({
         success: true,
         data: record,
         ai_analysis: aiResult || null,
+        sync_module: syncResult,
       });
     } catch (e) {
       console.error('[DailyRecords] POST /saveFromDraft 失败:', e.message);
@@ -417,12 +542,12 @@ module.exports = function (db) {
       const info = insertSchedule.run(
         record.title,
         record.content || '',
-        start_time,
-        end_time,
+        start_time || record.start_time || '',
+        end_time || record.end_time || '',
         '日程',
-        '中',
-        '',
-        '',
+        record.priority || '中',
+        record.person || '',
+        record.location || '',
         0,
         '单次',
         '待办',
@@ -484,13 +609,7 @@ module.exports = function (db) {
       end_time = `${matches[1][1]} ${matches[1][2].padStart(5, '0')}:00`;
     } else if (matches.length === 1) {
       start_time = `${matches[0][1]} ${matches[0][2].padStart(5, '0')}:00`;
-      // 默认结束时间 = 开始时间 + 1小时
-      const d = new Date(start_time.replace(' ', 'T'));
-      if (!isNaN(d.getTime())) {
-        d.setHours(d.getHours() + 1);
-        const pad = (n) => String(n).padStart(2, '0');
-        end_time = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
-      }
+      // 日程不需要默认结束时间，保持为空
     }
 
     return { start_time, end_time };

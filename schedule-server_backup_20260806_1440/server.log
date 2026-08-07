@@ -1,0 +1,10 @@
+◇ injected env (8) from .env // tip: ⌘ suppress logs { quiet: true }
+[提醒服务] 定时扫描已启动（每分钟）
+[草稿清理] 定时任务已注册（每日 02:10）
+[日程管理] API 已启动 → http://0.0.0.0:3002
+[日程管理] 网页端    → http://0.0.0.0:3002/
+[日程管理] 健康检查 → http://0.0.0.0:3002/api/health
+[Doubao] 发送请求: { model: 'ep-20260802222657-r9lp6', msgCount: 2 }
+[Doubao] 发送请求: { model: 'ep-20260802222657-r9lp6', msgCount: 2 }
+[Doubao] 原始响应: {"title":"问候语","content":"hello"}
+[Drafts] 创建草稿 id=50 source=text

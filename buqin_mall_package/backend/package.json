@@ -1,0 +1,23 @@
+{
+  "name": "buqin-backend",
+  "version": "2.0.0",
+  "description": "埠勤商贸业务管理系统 - Node.js API 服务器",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "init-db": "node scripts/init-db.js",
+    "init-mall": "node scripts/init-mall.js"
+  },
+  "dependencies": {
+    "adm-zip": "^0.6.0",
+    "better-sqlite3": "^13.0.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.11.0",
+    "puppeteer-core": "^25.4.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  }
+}

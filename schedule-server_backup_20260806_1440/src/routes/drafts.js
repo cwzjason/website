@@ -1,0 +1,936 @@
+/**
+ * 【新增】草稿路由 - 首页AI粗解析
+ * 独立链路，仅操作 drafts 表，不复用 /api/chat
+ * AI底层调用 doubao.js，使用阶段1专用 System Prompt
+ */
+const express = require('express');
+const router = express.Router();
+const { chat } = require('../services/doubao');
+
+/**
+ * 兜底：从中文文本中提取具体时间 HH:mm
+ * 支持：下午四点、4点、四点半、4点半、上午十点、晚上八点、早上六点、凌晨三点、中午十二点、四点二十分
+ * 优先根据 currentStartTime 推断上午/下午；没有则裸数字默认下午
+ */
+function extractTimeFallback(text, currentStartTime = '') {
+  if (!text) return null;
+  const t = String(text).trim();
+
+  const cnNums = {
+    '零': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
+    '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
+    '两': 2, '廿': 20, '卅': 30
+  };
+
+  function cnToNumber(s) {
+    if (!s) return null;
+    if (/^\d+$/.test(s)) return parseInt(s, 10);
+    if (/^[一二三四五六七八九十两]+$/.test(s)) {
+      if (s === '十') return 10;
+      if (s.startsWith('十')) return 10 + cnToNumber(s.slice(1));
+      if (s.endsWith('十')) return cnToNumber(s.slice(0, -1)) * 10;
+      const parts = s.split('十');
+      if (parts.length === 2) return cnToNumber(parts[0]) * 10 + cnToNumber(parts[1]);
+      let sum = 0;
+      for (const ch of s) sum = sum * 10 + (cnNums[ch] || 0);
+      return sum;
+    }
+    return null;
+  }
+
+  let defaultAfternoon = true;
+  const currentTimeMatch = String(currentStartTime).match(/(\d{2}):(\d{2})/);
+  if (currentTimeMatch) {
+    const currentHour = parseInt(currentTimeMatch[1], 10);
+    defaultAfternoon = currentHour >= 12;
+  }
+
+  // 1. 带明确时段词
+  const explicitPattern = /(凌晨|早上|上午|中午|下午|晚上)\s*([\d一二三四五六七八九十两]+)\s*点(?:\s*([\d一二三四五六七八九十两]+?)\s*分)?/;
+  const m1 = t.match(explicitPattern);
+  if (m1) {
+    const period = m1[1];
+    const hour = cnToNumber(m1[2]);
+    let minute = 0;
+    if (m1[3]) minute = cnToNumber(m1[3]);
+    if (hour === null || hour < 0 || hour > 23) return null;
+
+    let realHour = hour;
+    if (period === '下午' && hour < 12) realHour = hour + 12;
+    if (period === '晚上' && hour < 12) realHour = hour + 12;
+    if (period === '中午' && hour < 12 && hour !== 12) realHour = hour + 12;
+    if (period === '凌晨' && hour >= 12) realHour = hour - 12;
+    if (period === '早上' && hour >= 12) realHour = hour - 12;
+    if (period === '上午' && hour >= 12) realHour = hour - 12;
+
+    return `${String(realHour).padStart(2, '0')}:${String(minute || 0).padStart(2, '0')}`;
+  }
+
+  // 2. 半点
+  const halfPattern = /([\d一二三四五六七八九十两]+)\s*点\s*半/;
+  const m2 = t.match(halfPattern);
+  if (m2) {
+    const hour = cnToNumber(m2[1]);
+    if (hour === null) return null;
+    const realHour = defaultAfternoon && hour < 12 ? hour + 12 : hour;
+    return `${String(realHour).padStart(2, '0')}:30`;
+  }
+
+  // 3. X点Y分
+  const minutePattern = /([\d一二三四五六七八九十两]+)\s*点\s*([\d一二三四五六七八九十两]+)\s*分/;
+  const m3 = t.match(minutePattern);
+  if (m3) {
+    const hour = cnToNumber(m3[1]);
+    const minute = cnToNumber(m3[2]);
+    if (hour === null || minute === null) return null;
+    const realHour = defaultAfternoon && hour < 12 ? hour + 12 : hour;
+    return `${String(realHour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  }
+
+  // 4. 裸 X点
+  const hourPattern = /([\d一二三四五六七八九十两]+)\s*点(?:钟)?/;
+  const m4 = t.match(hourPattern);
+  if (m4) {
+    const hour = cnToNumber(m4[1]);
+    if (hour === null || hour < 0 || hour > 23) return null;
+    const realHour = defaultAfternoon && hour < 12 ? hour + 12 : hour;
+    return `${String(realHour).padStart(2, '0')}:00`;
+  }
+
+  return null;
+}
+
+// 阶段1 AI粗解析 System Prompt - 新版：自动识别模块类型 + 结构化提取
+function buildParsePrompt() {
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const nowTime = `${String(today.getHours()).padStart(2,'0')}:${String(today.getMinutes()).padStart(2,'0')}`;
+  return `你是专门做日常记录文本解析的工具，只输出严格合法JSON，**不要任何自然语言解释、不要markdown、不要注释，直接返回JSON字符串**。
+
+今天是 ${todayStr}，当前时间 ${nowTime}。
+
+## 模块定义（module_type 只能取下面5个枚举值）
+1. schedule 日程：有明确发生时刻，会面、聚餐、开会、外出，事件是「在某个时间点要发生」
+2. task 任务：待办、要完成的工作事情，重点关注截止时间，不一定有明确开始时间
+3. inspiration 灵感：想法、点子、感悟、一闪而过念头，没有待办、没有强制时间要求
+4. apply 申请：请假、出差、报批、各类需要提交审批的事项
+5. expense 报销：消费、花钱、需要报销的记录
+
+> 判断优先顺序（严格执行）：
+> - 提到花钱、报销、费用 → expense
+> - 提到请假、调休、出差、审批、申请 → apply（关键字优先，即使有时间描述也归 apply）
+> - 有明确截止日期要完成的待办事情 → task
+> - 有明确具体钟点发生的会面、聚餐、活动 → schedule
+> - 其余零散想法、念头、点子 → inspiration
+
+## 输出JSON固定结构
+{
+  "title": "事件标题，简短提炼用户输入核心内容，不能为空",
+  "remark": "备注信息，没有则null或空字符串",
+  "module_type": "schedule / task / inspiration / apply / expense 五选一",
+  "schedule": {
+    "start_time": "yyyy-MM-dd HH:mm 格式，无则null或空字符串",
+    "location": "地点，识别不到null或空字符串",
+    "person": "相关人物，识别不到null或空字符串",
+    "priority": "低 / 中 / 高 ，识别不到默认中"
+  },
+  "task": {
+    "deadline": "yyyy-MM-dd HH:mm 截止时间，识别不到null或空字符串",
+    "priority": "低 / 中 / 高，识别不到默认中"
+  },
+  "apply": {
+    "start_time": "yyyy-MM-dd HH:mm，无则null或空字符串",
+    "end_time": "yyyy-MM-dd HH:mm，无则null或空字符串"
+  },
+  "expense": {
+    "amount": "金额数字字符串，只提取数字，识别不到null或空字符串"
+  }
+}
+
+## 强制约束
+1. 时间输出严格 yyyy-MM-dd HH:mm，只解析用户原文，不许脑补编造时间；
+2. 只有明确了具体钟点（如"3点""十点""08:30""晚上八点"）才能填时间，仅有模糊时间段（"下午""上午""晚上"等）不能猜时间，必须为空；
+3. 没有识别到的内容全部填null或空字符串，绝对不能凭空生成不存在信息；
+4. priority只允许：低、中、高；
+5. amount只提取金额数字，比如"花了120"输出"120"；没有花钱就null；
+6. title务必精简，不要冗余；
+7. 用户说「把时间改成五点」这类修改指令，直接修改对应时间字段，不要把指令放进title；
+8. 关键词优先级高于时间描述：哪怕句子里有"下午""明天""今天"等时间词，只要核心意图是请假/报销/审批申请，module_type 必须优先选择 apply 或 expense；
+9. 只输出JSON，禁止输出任何别的文字、说明、思考过程。
+
+## 示例输入输出
+输入："周五下午五点和老虎吃饭"
+{"title":"和老虎吃饭","remark":null,"module_type":"schedule","schedule":{"start_time":"2026-08-07 17:00","location":null,"person":"老虎","priority":"中"},"task":{"deadline":null,"priority":"中"},"apply":{"start_time":null,"end_time":null},"expense":{"amount":null}}
+
+输入："本周五之前写完报告"
+{"title":"写完报告","remark":null,"module_type":"task","schedule":{"start_time":null,"location":null,"person":null,"priority":"中"},"task":{"deadline":"2026-08-07 23:59","priority":"中"},"apply":{"start_time":null,"end_time":null},"expense":{"amount":null}}
+
+输入："打车花80元需要报销"
+{"title":"打车报销","remark":null,"module_type":"expense","schedule":{"start_time":null,"location":null,"person":null,"priority":"中"},"task":{"deadline":null,"priority":"中"},"apply":{"start_time":null,"end_time":null},"expense":{"amount":"80"}}
+
+输入："下周一请假一天去医院"
+{"title":"请假去医院","remark":null,"module_type":"apply","schedule":{"start_time":null,"location":null,"person":null,"priority":"中"},"task":{"deadline":null,"priority":"中"},"apply":{"start_time":"2026-08-10 09:00","end_time":"2026-08-10 18:00"},"expense":{"amount":null}}
+
+输入："想请假"
+{"title":"请假","remark":null,"module_type":"apply","schedule":{"start_time":null,"location":null,"person":null,"priority":"中"},"task":{"deadline":null,"priority":"中"},"apply":{"start_time":null,"end_time":null},"expense":{"amount":null}}
+原因："请假"是apply关键词，"想"表达意图而非灵感想法，时间留空。
+
+输入："下午想请假"
+{"title":"请假","remark":null,"module_type":"apply","schedule":{"start_time":null,"location":null,"person":null,"priority":"中"},"task":{"deadline":null,"priority":"中"},"apply":{"start_time":null,"end_time":null},"expense":{"amount":null}}
+原因：含有"请假"关键词，优先判定为apply；"下午"没有具体钟点，时间留空。
+
+输入："今天下午请假"
+{"title":"请假","remark":null,"module_type":"apply","schedule":{"start_time":null,"location":null,"person":null,"priority":"中"},"task":{"deadline":null,"priority":"中"},"apply":{"start_time":null,"end_time":null},"expense":{"amount":null}}
+原因：同上，"请假"优先apply，时间模糊留空。
+
+输入："想到一个新产品点子可以做AI日程"
+{"title":"新产品点子","remark":"做AI日程","module_type":"inspiration","schedule":{"start_time":null,"location":null,"person":null,"priority":"中"},"task":{"deadline":null,"priority":"中"},"apply":{"start_time":null,"end_time":null},"expense":{"amount":null}}
+
+输入："今天下午和老虎吃饭"
+{"title":"和老虎吃饭","remark":null,"module_type":"schedule","schedule":{"start_time":null,"location":null,"person":"老虎","priority":"中"},"task":{"deadline":null,"priority":"中"},"apply":{"start_time":null,"end_time":null},"expense":{"amount":null}}
+原因是"下午"没有具体钟点，schedule.start_time留空。
+
+输入："晚上跟朋友聚餐聊事情"
+{"title":"跟朋友聚餐","remark":"聊事情","module_type":"schedule","schedule":{"start_time":null,"location":null,"person":"朋友","priority":"中"},"task":{"deadline":null,"priority":"中"},"apply":{"start_time":null,"end_time":null},"expense":{"amount":null}}
+
+禁止行为：不要检测日程冲突、不要额外预测、不要把话题分类放进title。`;
+}
+
+// AI 调整草稿专用 Prompt：根据模块类型 + 用户修改指令 + 当前卡片内容，定点修补字段
+function buildAdjustPrompt(targetModule = 'schedule') {
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const nowTime = `${String(today.getHours()).padStart(2,'0')}:${String(today.getMinutes()).padStart(2,'0')}`;
+
+  // 模块定义：字段 + 描述 + 示例
+  const moduleConfigs = {
+    schedule: {
+      name: '日程',
+      fields: ['title', 'content', 'person', 'location', 'start_time', 'end_time', 'priority'],
+      fieldDesc: `- title: 事件标题，保持原事件语义
+- content: 备注/补充说明
+- person: 参与人物（可选）
+- location: 地点（可选）
+- start_time: 开始时间，格式 YYYY-MM-DD HH:mm（可选）
+- end_time: 结束时间，日程类事项通常空字符串
+- priority: 优先级，只能是 低、中、高 之一
+
+注意：只填用户提到的字段，没提到的保持原样或留空，不要编造。`,
+      examples: `卡片: {"title":"和老虎吃饭","person":"老虎","location":"","content":"","start_time":""}
+用户说: 下午四点吃饭
+✅ 正确: {"title":"和老虎吃饭","person":"老虎","location":"","content":"","start_time":"${todayStr} 16:00","end_time":"","priority":"中"}
+原因: 用户只说了时间，就只更新时间，地点保持空
+
+卡片: {"title":"和老虎吃饭","person":"老虎","location":"武汉","content":"","start_time":""}
+用户说: 下午四点在黄鹤楼
+✅ 正确: {"title":"和老虎吃饭","person":"老虎","location":"黄鹤楼","content":"","start_time":"${todayStr} 16:00","end_time":"","priority":"中"}
+原因: 日程类要同时提取时间和地点
+
+卡片: {"title":"和老虎吃饭","person":"老虎","location":"武汉","content":"","start_time":"${todayStr} 15:00"}
+用户说: 改成四点
+✅ 正确: {"title":"和老虎吃饭","person":"老虎","location":"武汉","content":"","start_time":"${todayStr} 16:00","end_time":"","priority":"中"}
+
+卡片: {"title":"和老虎吃饭","person":"老虎","location":"黄鹤楼","content":"","start_time":"${todayStr} 16:00"}
+用户说: 备注带酒
+✅ 正确: {"title":"和老虎吃饭","person":"老虎","location":"黄鹤楼","content":"带酒","start_time":"${todayStr} 16:00","end_time":"","priority":"中"}
+
+卡片: {"title":"和老虎吃饭","person":"老虎","location":"黄鹤楼","content":"带酒","start_time":"${todayStr} 16:00"}
+用户说: 备注改一下，带一瓶茅台
+✅ 正确: {"title":"和老虎吃饭","person":"老虎","location":"黄鹤楼","content":"带一瓶茅台","start_time":"${todayStr} 16:00","end_time":"","priority":"中"}
+原因: 用户说"备注..."后面的内容是备注，放到content字段`,
+    },
+    task: {
+      name: '任务',
+      fields: ['title', 'content', 'deadline', 'priority'],
+      fieldDesc: `- title: 任务标题
+- content: 任务描述/备注
+- deadline: 截止时间，格式 YYYY-MM-DD HH:mm（必填）
+- priority: 优先级，只能是 低、中、高 之一
+
+⚠️ 任务模块没有 start_time、location、person、amount 字段，不要返回这些字段`,
+      examples: `卡片: {"title":"提交周报","content":"","deadline":""}
+用户说: 截止今天下午5点
+✅ 正确: {"title":"提交周报","content":"","deadline":"${todayStr} 17:00","priority":"中"}
+
+卡片: {"title":"联系客户","content":"","deadline":"${todayStr} 18:00"}
+用户说: 改成明天上午十点
+✅ 正确: {"title":"联系客户","content":"","deadline":"2026-08-05 10:00","priority":"中"}
+
+卡片: {"title":"和老虎出去吃饭","content":"","deadline":""}
+用户说: 截止时间是9:00
+✅ 正确: {"title":"和老虎出去吃饭","content":"","deadline":"${todayStr} 09:00","priority":"中"}
+
+卡片: {"title":"提交周报","content":"","deadline":"${todayStr} 17:00"}
+用户说: 备注需要附上本周的销售数据
+✅ 正确: {"title":"提交周报","content":"需要附上本周的销售数据","deadline":"${todayStr} 17:00","priority":"中"}
+原因: 用户说"备注..."后面的内容应该放到content字段
+
+❌ 错误: {"title":"联系客户","content":"","start_time":"2026-08-05 10:00"}
+错误原因: 任务模块应使用 deadline，不是 start_time`,
+    },
+    inspiration: {
+      name: '灵感',
+      fields: ['title', 'content'],
+      fieldDesc: `- title: 灵感标题
+- content: 灵感备注/详细内容（必填/核心）
+
+⚠️ 灵感模块只有 title 和 content（即备注），没有时间、地点、人物、金额、优先级`,
+      examples: `卡片: {"title":"产品想法","content":"做一个AI助手"}
+用户说: 补充一下，可以记录每日日程
+✅ 正确: {"title":"产品想法","content":"做一个AI助手，可以记录每日日程"}
+
+卡片: {"title":"产品想法","content":"做一个AI助手"}
+用户说: 备注需要支持语音输入
+✅ 正确: {"title":"产品想法","content":"做一个AI助手，需要支持语音输入"}
+原因: "备注..."后面的内容应该合并到content中
+
+❌ 错误: {"title":"产品想法","content":"可以记录每日日程","priority":"中","start_time":"${todayStr} 10:00"}
+错误原因: 灵感模块不应返回 priority 和 start_time`,
+    },
+    application: {
+      name: '申请',
+      fields: ['title', 'content', 'start_time', 'end_time', 'priority'],
+      fieldDesc: `- title: 申请标题（如请假、调休、报销预审）
+- content: 申请事由/备注
+- start_time: 开始时间，格式 YYYY-MM-DD HH:mm（可选，不填默认当前时间）
+- end_time: 结束时间，格式 YYYY-MM-DD HH:mm（可选，不填默认当前时间）
+- priority: 优先级，只能是 低、中、高 之一
+
+⚠️ 申请模块不需要 location/person/amount，时间可选（不填默认当前时间）`,
+      examples: `卡片: {"title":"请假","content":"事假","start_time":"","end_time":""}
+用户说: 明天上午9点到11点
+✅ 正确: {"title":"请假","content":"事假","start_time":"2026-08-05 09:00","end_time":"2026-08-05 11:00","priority":"中"}
+
+卡片: {"title":"请假","content":"事假","start_time":"","end_time":""}
+用户说: 确认
+✅ 正确: {"title":"请假","content":"事假","start_time":"","end_time":"","priority":"中"}
+原因: 用户没提时间，保留空字符串（系统会自动设为当前时间）
+
+❌ 错误: {"title":"请假","content":"事假","start_time":"${todayStr} 09:00","end_time":"${todayStr} 18:00"}
+错误原因: 用户没给时间时不要自己编造时间，留空让系统默认`,
+    },
+    expense: {
+      name: '报销',
+      fields: ['title', 'content', 'amount', 'start_time'],
+      fieldDesc: `- title: 报销项目/标题
+- content: 报销说明
+- amount: 金额，必须是数字（必填）
+- start_time: 费用发生日期，格式 YYYY-MM-DD（可只填日期，不含时间）
+
+⚠️ 报销模块必填 amount，不要填 location/person/end_time/deadline`,
+      examples: `卡片: {"title":"餐饮费","content":"","amount":"","start_time":""}
+用户说: 金额128
+✅ 正确: {"title":"餐饮费","content":"","amount":128,"start_time":"${todayStr}"}
+
+卡片: {"title":"打车费","content":"","amount":50,"start_time":""}
+用户说: 改成昨天的
+✅ 正确: {"title":"打车费","content":"","amount":50,"start_time":"2026-08-03"}`,
+    },
+  };
+
+  const cfg = moduleConfigs[targetModule] || moduleConfigs.schedule;
+  const moduleName = cfg.name;
+
+  // 时间提取通用规则
+  const timeRule = `【时间识别通用规则 - 适用于所有含时间字段的模块】
+1. 用户输入中只要出现"点""点半""分"等具体钟点描述，就必须更新时间字段。
+2. "下午X点" → 12+X:00。如"下午四点" → "16:00"
+3. "X点"（无上午/下午）默认按下午处理。如"四点" → "16:00"
+4. "上午X点" → "0X:00" 或 "XX:00"；"晚上X点" → "12+X:00"
+5. 日期默认今天 ${todayStr}。相对时间：明天、后天等按自然日推算。
+6. 上下文感知：当前卡片已有下午时间，用户说"改成四点"→下午四点；已有上午时间→上午四点。`;
+
+  return `你是${moduleName}卡片修改助手。当前模块为【${moduleName}】。用户会给你当前卡片内容和一个修改指令。
+你的任务：保持所有未提及字段不变，只修改用户明确要求的字段，且只返回该模块应有的字段。
+
+今天是 ${todayStr}，当前时间 ${nowTime}。
+
+【当前模块字段说明 - 仅使用以下字段】
+${cfg.fieldDesc}
+
+【核心规则 - 不遵守即错误】
+1. 你是修补工，不是重写者。title 必须保持原事件意思。
+2. 只改用户明确提到的字段，未提及的字段原封不动返回。
+3. 不要编造用户没有说的内容，不要添加解释。
+4. 必须严格遵守当前模块的字段范围，禁止返回该模块没有的字段。
+5. 一句话中同时涉及多个字段时，必须全部更新，不能只改一个。
+
+${timeRule}
+
+【${moduleName}模块示例】
+${cfg.examples}
+
+输出要求：只返回纯JSON对象，一行，不要markdown，不要\`\`\`json，不要任何解释文字。`;
+}
+
+/**
+ * 调用 AI 解析文本，返回 { title, content, person, location, start_time, end_time, priority }
+ * AI 不可用时降级返回原始内容
+ */
+async function aiParseDraft(rawContent) {
+  try {
+    const result = await chat(
+      [{ role: 'user', content: rawContent }],
+      { systemPrompt: buildParsePrompt(), temperature: 0.1, maxTokens: 1024 }
+    );
+      if (result && result.text) {
+        try {
+          let jsonStr = result.text.trim();
+          if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
+          if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
+          if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
+          const parsed = JSON.parse(jsonStr.trim());
+
+          // 新版输出格式：module_type + 嵌套模块字段
+          let moduleType = ['schedule','task','inspiration','apply','expense'].includes(parsed.module_type)
+            ? parsed.module_type : 'schedule';
+
+          // 关键词兜底：防止 AI 对短文本误判（如"想请假"被 doubao 误判为 inspiration）
+          const rawForCheck = rawContent.replace(/\r?\n/g, ' ').trim();
+          if (/请假|调休|出差|批假|年假|事假|病假|婚假/.test(rawForCheck)) {
+            console.log(`[Drafts] 关键词兜底 apply："${rawForCheck}" → force apply（AI返回=${moduleType}）`);
+            moduleType = 'apply';
+          } else if (/报销|报销单|打车费|餐费|请款|费用报销/.test(rawForCheck)) {
+            console.log(`[Drafts] 关键词兜底 expense："${rawForCheck}" → force expense（AI返回=${moduleType}）`);
+            moduleType = 'expense';
+          }
+
+          const schedule = parsed.schedule || {};
+          const task = parsed.task || {};
+          const apply = parsed.apply || {};
+          const expense = parsed.expense || {};
+
+          // 映射到数据库扁平字段
+          let startTime = schedule.start_time || apply.start_time || '';
+          let endTime = apply.end_time || '';
+          let deadline = task.deadline || '';
+          let location = schedule.location || '';
+          let person = schedule.person || '';
+          let amount = expense.amount || '';
+          let priority = schedule.priority || task.priority || '中';
+
+          // 兜底：AI 没抽出时间但用户原文里有时间表达，直接正则提取
+          if (!startTime && !deadline) {
+            const fallbackTime = extractTimeFallback(rawContent, '');
+            if (fallbackTime) {
+              const today = new Date();
+              const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+              if (moduleType === 'task') {
+                deadline = `${todayStr} ${fallbackTime}`;
+              } else {
+                startTime = `${todayStr} ${fallbackTime}`;
+              }
+              console.log(`[Drafts] 初始解析时间兜底命中："${rawContent}" → ${startTime || deadline}`);
+            }
+          }
+
+          console.log(`[Drafts] AI解析 module_type=${moduleType} title="${parsed.title}"`);
+
+          return {
+            title: parsed.title || '',
+            content: parsed.remark || parsed.content || '',
+            person,
+            location,
+            start_time: startTime,
+            end_time: endTime,
+            deadline,
+            amount,
+            priority: ['低', '中', '高'].includes(priority) ? priority : '中',
+            module_type: moduleType,
+          };
+        } catch {
+          // JSON 解析失败，AI 文本直接作为内容
+          return { title: '', content: result.text || rawContent, person: '', location: '', start_time: '', end_time: '', deadline: '', amount: '', priority: '中', module_type: 'schedule' };
+        }
+      }
+    } catch (e) {
+      console.error('[Drafts] AI 调用失败:', e.message);
+    }
+    // 降级：AI 不可用时返回原始内容
+    return { title: '', content: rawContent, person: '', location: '', start_time: '', end_time: '', deadline: '', amount: '', priority: '中', module_type: 'schedule' };
+}
+
+/**
+ * 调用 AI 根据用户修改指令调整草稿字段
+ * @param {object} draft - 当前草稿对象（含所有字段）
+ * @param {string} userText - 用户的修改指令文本
+ * @param {string} targetModule - 当前模块（schedule/task/inspiration/application/expense）
+ */
+async function aiAdjustDraft(draft, userText, targetModule = 'schedule') {
+  try {
+    // 用 JSON 格式呈现当前卡片，让 AI 看清楚每个字段
+    // 只展示当前模块相关字段，避免 AI 被无关字段干扰
+    const currentCard = { title: draft.parsed_title || '', content: draft.parsed_content || '' };
+    if (targetModule === 'schedule' || targetModule === 'application') {
+      currentCard.start_time = draft.start_time || '';
+      currentCard.end_time = draft.end_time || '';
+    }
+    if (targetModule === 'schedule') {
+      currentCard.person = draft.person || '';
+      currentCard.location = draft.location || '';
+      currentCard.priority = draft.priority || '中';
+    }
+    if (targetModule === 'task') {
+      currentCard.deadline = draft.deadline || '';
+      currentCard.priority = draft.priority || '中';
+    }
+    if (targetModule === 'application') {
+      currentCard.priority = draft.priority || '中';
+    }
+    if (targetModule === 'expense') {
+      currentCard.amount = draft.amount || 0;
+      currentCard.start_time = draft.start_time || '';
+    }
+    if (targetModule === 'inspiration') {
+      // 只有 title + content
+    }
+
+    const context = [
+      '当前卡片完整内容：',
+      JSON.stringify(currentCard, null, 2),
+      '',
+      `用户修改指令：${userText}`,
+      '',
+      '请返回修改后的完整JSON（只改用户提到的字段，其他字段必须与上述卡片完全一致）：',
+    ].join('\n');
+
+    const result = await chat(
+      [{ role: 'user', content: context }],
+      { systemPrompt: buildAdjustPrompt(targetModule), temperature: 0.1, maxTokens: 1024 }
+    );
+
+    if (result && result.text) {
+      try {
+        let jsonStr = result.text.trim();
+        // 清洗可能包裹的 markdown 标记
+        jsonStr = jsonStr.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+        const parsed = JSON.parse(jsonStr.trim());
+
+        // 兜底：如果 AI 返回的 title 包含指令性文句（如"修改"、"调整"），
+        // 说明 AI 没有正确理解，用原 title 覆盖
+        const instructionKeywords = ['修改', '调整', '更新', '设置为', '改为', '变更', '改成'];
+        const titleLooksWrong = instructionKeywords.some(kw => (parsed.title || '').includes(kw) && !(draft.parsed_title || '').includes(kw));
+        if (titleLooksWrong && draft.parsed_title) {
+          console.log(`[Drafts] AI 错误改写了 title: "${parsed.title}" → 回退为 "${draft.parsed_title}"`);
+          parsed.title = draft.parsed_title;
+        }
+
+    let finalStartTime = parsed.start_time !== undefined ? parsed.start_time : currentCard.start_time;
+    let finalDeadline = parsed.deadline !== undefined ? parsed.deadline : currentCard.deadline;
+    console.log(`[Drafts] AI调整 raw="${userText}" module=${targetModule} currentStart=${currentCard.start_time} parsedStart=${parsed.start_time} parsedDeadline=${parsed.deadline}`);
+
+    const todayStrForTime = () => {
+      const today = new Date();
+      return `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    };
+
+    // 兜底：AI 没抽出时间但用户原文里有时间表达，直接正则提取
+    if (!finalStartTime) {
+      const fallbackTime = extractTimeFallback(userText, currentCard.start_time);
+      console.log(`[Drafts] 时间兜底结果：fallbackTime=${fallbackTime}`);
+      if (fallbackTime) {
+        finalStartTime = `${todayStrForTime()} ${fallbackTime}`;
+        console.log(`[Drafts] 时间兜底命中："${userText}" → ${finalStartTime}`);
+      }
+    }
+
+    // 兜底：任务模块 deadline 同样做时间兜底
+    if (!finalDeadline && targetModule === 'task') {
+      const fallbackTime = extractTimeFallback(userText, '');
+      console.log(`[Drafts] deadline 时间兜底结果：fallbackTime=${fallbackTime}`);
+      if (fallbackTime) {
+        finalDeadline = `${todayStrForTime()} ${fallbackTime}`;
+        console.log(`[Drafts] deadline 时间兜底命中："${userText}" → ${finalDeadline}`);
+      }
+    }
+
+    // 规范化：如果只返回了 HH:mm，自动补今天的日期
+    if (finalStartTime && /^\d{2}:\d{2}$/.test(finalStartTime.trim())) {
+      finalStartTime = `${todayStrForTime()} ${finalStartTime.trim()}`;
+      console.log(`[Drafts] 时间补全日期：${finalStartTime}`);
+    }
+    if (finalDeadline && /^\d{2}:\d{2}$/.test(finalDeadline.trim())) {
+      finalDeadline = `${todayStrForTime()} ${finalDeadline.trim()}`;
+      console.log(`[Drafts] deadline 补全日期：${finalDeadline}`);
+    }
+
+    return {
+          title: parsed.title !== undefined ? parsed.title : currentCard.title,
+          content: parsed.content !== undefined ? parsed.content : currentCard.content,
+          person: parsed.person !== undefined ? parsed.person : currentCard.person,
+          location: parsed.location !== undefined ? parsed.location : currentCard.location,
+          start_time: finalStartTime,
+          end_time: parsed.end_time !== undefined ? parsed.end_time : currentCard.end_time,
+          deadline: finalDeadline,
+          amount: parsed.amount !== undefined ? parsed.amount : currentCard.amount,
+          priority: parsed.priority || currentCard.priority,
+          ai_hint: `已按"${userText}"进行调整`,
+        };
+      } catch (parseErr) {
+        console.error('[Drafts] AI调整 JSON 解析失败:', result.text, parseErr.message);
+      }
+    }
+  } catch (e) {
+    console.error('[Drafts] AI调整调用失败:', e.message);
+  }
+  return null;
+}
+
+module.exports = function (db) {
+
+  // ===== POST /create - 创建草稿（AI粗解析） =====
+  router.post('/create', async (req, res) => {
+    try {
+      const { openid, source_type, raw_content, raw_file_url } = req.body;
+      if (!openid) return res.status(400).json({ success: false, error: '缺少openid' });
+      if (!raw_content && !raw_file_url) {
+        return res.status(400).json({ success: false, error: '缺少素材内容（raw_content 或 raw_file_url）' });
+      }
+
+      // 调用阶段1 AI 粗解析
+      let parsed_title = '';
+      let parsed_content = raw_content || '';
+      let person = '';
+      let location = '';
+      let start_time = '';
+      let end_time = '';
+      let deadline = '';
+      let amount = '';
+      let priority = '中';
+      let module_type = 'schedule';
+      if (raw_content && raw_content.trim()) {
+        const parsed = await aiParseDraft(raw_content);
+        parsed_title = parsed.title;
+        parsed_content = parsed.content;
+        person = parsed.person || '';
+        location = parsed.location || '';
+        start_time = parsed.start_time || '';
+        end_time = parsed.end_time || '';
+        deadline = parsed.deadline || '';
+        amount = parsed.amount || '';
+        priority = parsed.priority || '中';
+        module_type = parsed.module_type || 'schedule';
+
+        // 申请模块：时间默认当前时间
+        if (module_type === 'apply') {
+          const now = new Date();
+          const nowStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+          if (!start_time) start_time = nowStr;
+          if (!end_time) end_time = nowStr;
+          console.log(`[Drafts] 申请模块默认时间：${nowStr}`);
+        }
+      }
+
+      const info = db.prepare(
+        `INSERT INTO drafts (openid, source_type, raw_content, raw_file_url, parsed_title, parsed_content,
+          person, location, start_time, end_time, deadline, amount, priority,
+          target_module, suggest_module, user_selected_module)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(openid, source_type || 'text', raw_content || '', raw_file_url || '',
+        parsed_title, parsed_content, person, location, start_time, end_time,
+        deadline, amount, priority,
+        module_type, module_type, module_type);
+
+      const draft = db.prepare('SELECT * FROM drafts WHERE id = ?').get(info.lastInsertRowid);
+      console.log(`[Drafts] 创建草稿 id=${info.lastInsertRowid} source=${source_type || 'text'}`);
+      res.json({ success: true, data: draft });
+    } catch (e) {
+      console.error('[Drafts] POST /create 失败:', e.message);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // ===== POST /adjust - AI 根据用户指令调整草稿 =====
+  router.post('/adjust', async (req, res) => {
+    try {
+      const { openid, draft_id, user_text, target_module } = req.body;
+      if (!openid) return res.status(400).json({ success: false, error: '缺少openid' });
+      if (!draft_id) return res.status(400).json({ success: false, error: '缺少draft_id' });
+
+      const draft = db.prepare(
+        'SELECT * FROM drafts WHERE id = ? AND openid = ? AND status = ?'
+      ).get(draft_id, openid, 'draft');
+      if (!draft) return res.status(404).json({ success: false, error: '草稿不存在或已删除' });
+
+      const module_ = target_module || draft.user_selected_module || draft.target_module || 'schedule';
+      let updateFields = {};
+
+      if (user_text && user_text.trim()) {
+        // 有用户修改指令：用 AI 分析指令 + 当前卡片内容，返回修改后的字段
+        const adjusted = await aiAdjustDraft(draft, user_text.trim(), module_);
+        if (adjusted) {
+          updateFields = adjusted;
+        } else {
+          return res.status(500).json({ success: false, error: 'AI调整失败，请重试' });
+        }
+      } else {
+        // 无用户指令：兜底，对原始内容重新解析
+        const contentToParse = draft.raw_content || draft.parsed_content || '';
+        if (!contentToParse.trim()) {
+          return res.status(400).json({ success: false, error: '草稿无文本内容可供AI调整' });
+        }
+        const parsed = await aiParseDraft(contentToParse);
+        updateFields.title = parsed.title;
+        updateFields.content = parsed.content;
+        updateFields.person = parsed.person;
+        updateFields.location = parsed.location;
+        updateFields.start_time = parsed.start_time;
+        updateFields.end_time = parsed.end_time;
+        updateFields.deadline = parsed.deadline;
+        updateFields.amount = parsed.amount;
+        updateFields.priority = parsed.priority;
+      }
+
+      // 构建动态 SQL 更新
+      const setClauses = [];
+      const params = [];
+      if (updateFields.title !== undefined) {
+        setClauses.push('parsed_title = ?');
+        params.push(updateFields.title);
+      }
+      if (updateFields.content !== undefined) {
+        setClauses.push('parsed_content = ?');
+        params.push(updateFields.content);
+      }
+      if (updateFields.person !== undefined) {
+        setClauses.push('person = ?');
+        params.push(updateFields.person);
+      }
+      if (updateFields.location !== undefined) {
+        setClauses.push('location = ?');
+        params.push(updateFields.location);
+      }
+      if (updateFields.start_time !== undefined) {
+        setClauses.push('start_time = ?');
+        params.push(updateFields.start_time);
+      }
+      if (updateFields.end_time !== undefined) {
+        setClauses.push('end_time = ?');
+        params.push(updateFields.end_time);
+      }
+      if (updateFields.amount !== undefined) {
+        setClauses.push('amount = ?');
+        params.push(updateFields.amount);
+      }
+      if (updateFields.deadline !== undefined) {
+        setClauses.push('deadline = ?');
+        params.push(updateFields.deadline);
+      }
+      if (updateFields.priority !== undefined) {
+        setClauses.push('priority = ?');
+        params.push(updateFields.priority);
+      }
+      // 不覆盖用户手动选择的模块（adjust 只更新字段不改变 tab）
+      setClauses.push("updated_at = datetime('now','localtime')");
+      params.push(draft_id, openid);
+
+      db.prepare(
+        `UPDATE drafts SET ${setClauses.join(', ')} WHERE id = ? AND openid = ?`
+      ).run(...params);
+
+      const updated = db.prepare('SELECT * FROM drafts WHERE id = ?').get(draft_id);
+      // 附加 ai_hint（不会存入 DB）
+      if (updateFields.ai_hint) {
+        updated.ai_hint = updateFields.ai_hint;
+      }
+      console.log(`[Drafts] AI调整草稿 id=${draft_id}${user_text ? ', user_text=' + user_text.slice(0, 30) : ''}`);
+      res.json({ success: true, data: updated });
+    } catch (e) {
+      console.error('[Drafts] POST /adjust 失败:', e.message);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // ===== POST /adjust-existing - AI 根据用户指令调整「已存在的记录」（非草稿） =====
+  router.post('/adjust-existing', async (req, res) => {
+    try {
+      const { openid, record_type, record_id, user_text, target_module } = req.body;
+      if (!openid) return res.status(400).json({ success: false, error: '缺少openid' });
+      if (!record_type) return res.status(400).json({ success: false, error: '缺少record_type' });
+      if (!record_id) return res.status(400).json({ success: false, error: '缺少record_id' });
+
+      // 模块 -> 表名/字段名映射
+      const tableMap = {
+        schedule: 'schedules',
+        task: 'tasks',
+        application: 'applications',
+        expense: 'expenses',
+        inspiration: 'inspirations',
+        daily_record: 'daily_records',
+      };
+      const table = tableMap[record_type];
+      if (!table) return res.status(400).json({ success: false, error: '不支持的record_type' });
+
+      const record = db.prepare(`SELECT * FROM ${table} WHERE id = ? AND openid = ?`).get(record_id, openid);
+      if (!record) return res.status(404).json({ success: false, error: '记录不存在或已删除' });
+
+      const module_ = target_module || record.target_module || record.type || record.module_type || record_type;
+
+      // 把记录字段统一成 aiAdjustDraft 能识别的 draft 字段
+      const draftLike = {
+        parsed_title: record.title || record.parsed_title || '',
+        parsed_content: record.description || record.content || record.parsed_content || record.remark || '',
+        start_time: record.start_time || '',
+        end_time: record.end_time || '',
+        location: record.location || '',
+        person: record.person || '',
+        priority: record.priority || '中',
+        deadline: record.deadline || record.due_date || '',
+        amount: record.amount || '',
+        category: record.category || '',
+        tags: record.tags || '',
+      };
+
+      let updateFields = {};
+      if (user_text && user_text.trim()) {
+        const adjusted = await aiAdjustDraft(draftLike, user_text.trim(), module_);
+        if (adjusted) {
+          updateFields = adjusted;
+        } else {
+          return res.status(500).json({ success: false, error: 'AI调整失败，请重试' });
+        }
+      } else {
+        return res.status(400).json({ success: false, error: '缺少修改指令user_text' });
+      }
+
+      // 返回字段时附带当前模块，方便前端
+      updateFields.module_type = module_;
+      console.log(`[Drafts] AI调整已有记录 type=${record_type} id=${record_id}${user_text ? ', user_text=' + user_text.slice(0, 30) : ''}`);
+      res.json({ success: true, data: updateFields });
+    } catch (e) {
+      console.error('[Drafts] POST /adjust-existing 失败:', e.message);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // ===== POST /save-extra - 保存草稿额外字段（时间、地点、人物、金额、模块、优先级） =====
+  router.post('/save-extra', (req, res) => {
+    try {
+      const { openid, draft_id, start_time, end_time, deadline, location, person, amount, target_module, user_selected_module, priority } = req.body;
+      if (!openid) return res.status(400).json({ success: false, error: '缺少openid' });
+      if (!draft_id) return res.status(400).json({ success: false, error: '缺少draft_id' });
+
+      // 报销模块：金额必填校验
+      const effectiveModule = target_module || 'schedule';
+      if (effectiveModule === 'expense') {
+        const amt = amount !== undefined && amount !== '' ? parseFloat(amount) : NaN;
+        if (isNaN(amt) || amt <= 0) {
+          return res.status(400).json({ success: false, error: '报销模块金额不能为空，请输入金额' });
+        }
+      }
+
+      // 申请模块：时间默认当前时间（用户没填则自动补）
+      if (effectiveModule === 'apply') {
+        const now = new Date();
+        const nowStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        if (!start_time) start_time = nowStr;
+        if (!end_time) end_time = nowStr;
+        console.log(`[Drafts] save-extra 申请模块默认时间：${nowStr}`);
+      }
+
+      const draft = db.prepare(
+        'SELECT * FROM drafts WHERE id = ? AND openid = ? AND status = ?'
+      ).get(draft_id, openid, 'draft');
+      if (!draft) return res.status(404).json({ success: false, error: '草稿不存在或已删除' });
+
+      db.prepare(
+        `UPDATE drafts SET
+          start_time = ?, end_time = ?, deadline = ?, location = ?, person = ?,
+          amount = ?, target_module = ?, user_selected_module = ?, priority = ?,
+          updated_at = datetime('now','localtime')
+        WHERE id = ? AND openid = ?`
+      ).run(
+        start_time || null,
+        end_time || null,
+        deadline || null,
+        location || '',
+        person || '',
+        amount !== undefined && amount !== '' ? amount : null,
+        effectiveModule,
+        user_selected_module || effectiveModule,
+        priority || '中',
+        draft_id,
+        openid
+      );
+
+      const updated = db.prepare('SELECT * FROM drafts WHERE id = ?').get(draft_id);
+      console.log(`[Drafts] 保存额外字段 id=${draft_id} module=${effectiveModule}`);
+      res.json({ success: true, data: updated });
+    } catch (e) {
+      console.error('[Drafts] POST /save-extra 失败:', e.message);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // ===== POST /edit - 手动编辑草稿 =====
+  router.post('/edit', (req, res) => {
+    try {
+      const { openid, draft_id, parsed_title, parsed_content } = req.body;
+      if (!openid) return res.status(400).json({ success: false, error: '缺少openid' });
+      if (!draft_id) return res.status(400).json({ success: false, error: '缺少draft_id' });
+
+      const draft = db.prepare(
+        'SELECT * FROM drafts WHERE id = ? AND openid = ? AND status = ?'
+      ).get(draft_id, openid, 'draft');
+      if (!draft) return res.status(404).json({ success: false, error: '草稿不存在或已删除' });
+
+      db.prepare(
+        "UPDATE drafts SET parsed_title = ?, parsed_content = ?, updated_at = datetime('now','localtime') WHERE id = ? AND openid = ?"
+      ).run(
+        parsed_title !== undefined ? parsed_title : draft.parsed_title,
+        parsed_content !== undefined ? parsed_content : draft.parsed_content,
+        draft_id,
+        openid
+      );
+
+      const updated = db.prepare('SELECT * FROM drafts WHERE id = ?').get(draft_id);
+      console.log(`[Drafts] 手动编辑草稿 id=${draft_id}`);
+      res.json({ success: true, data: updated });
+    } catch (e) {
+      console.error('[Drafts] POST /edit 失败:', e.message);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // ===== POST /delete - 软删除草稿 =====
+  router.post('/delete', (req, res) => {
+    try {
+      const { openid, draft_id } = req.body;
+      if (!openid) return res.status(400).json({ success: false, error: '缺少openid' });
+      if (!draft_id) return res.status(400).json({ success: false, error: '缺少draft_id' });
+
+      const result = db.prepare(
+        "UPDATE drafts SET status = 'deleted', updated_at = datetime('now','localtime') WHERE id = ? AND openid = ? AND status = 'draft'"
+      ).run(draft_id, openid);
+
+      if (result.changes === 0) {
+        return res.status(404).json({ success: false, error: '草稿不存在或已删除' });
+      }
+
+      console.log(`[Drafts] 软删除草稿 id=${draft_id}`);
+      res.json({ success: true, message: '草稿已删除' });
+    } catch (e) {
+      console.error('[Drafts] POST /delete 失败:', e.message);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // ===== GET /list - 查询当前用户草稿列表 =====
+  router.get('/list', (req, res) => {
+    try {
+      const { openid } = req.query;
+      if (!openid) return res.status(400).json({ success: false, error: '缺少openid' });
+
+      const drafts = db.prepare(
+        "SELECT * FROM drafts WHERE openid = ? AND status = 'draft' ORDER BY created_at DESC"
+      ).all(openid);
+
+      res.json({ success: true, data: drafts, total: drafts.length });
+    } catch (e) {
+      console.error('[Drafts] GET /list 失败:', e.message);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  return router;
+};

@@ -1,0 +1,302 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""埠勤商贸 - 表格数据管理服务 (MariaDB)"""
+import json, os, re, csv, io
+from pathlib import Path
+from flask import Flask, request, jsonify
+import pymysql
+import pymysql.cursors
+import requests
+
+app = Flask(__name__)
+BASE_DIR = Path(__file__).resolve().parent
+UPLOAD_DIR = BASE_DIR / "uploads"
+UPLOAD_DIR.mkdir(exist_ok=True)
+
+DB = {
+    "host": os.environ.get("DB_HOST", "127.0.0.1"),
+    "user": os.environ.get("DB_USER", "buqin_app"),
+    "password": os.environ.get("DB_PASSWORD", ""),
+    "database": os.environ.get("DB_NAME", "buqin_business"),
+    "charset": "utf8mb4",
+    "cursorclass": pymysql.cursors.DictCursor,
+    "autocommit": False
+}
+
+def get_db():
+    return pymysql.connect(**DB)
+
+def fix_dt(row):
+    for k, v in list(row.items()):
+        if hasattr(v, 'isoformat'):
+            row[k] = v.isoformat() if v else None
+    row["_id"] = row.get("id")
+    return row
+
+# ========== 表格版本 ==========
+_table_versions = {}
+def load_versions():
+    try:
+        conn = get_db()
+        with conn.cursor() as c:
+            c.execute("SELECT table_name, version FROM table_meta")
+            for r in c.fetchall():
+                _table_versions[r["table_name"]] = r["version"]
+        conn.close()
+    except Exception as e:
+        print(f"load_versions err: {e}")
+
+def bump_version(tn):
+    new_v = _table_versions.get(tn, 0) + 1
+    _table_versions[tn] = new_v
+    try:
+        conn = get_db()
+        with conn.cursor() as c:
+            c.execute("INSERT INTO table_meta(table_name,version) VALUES(%s,%s) ON DUPLICATE KEY UPDATE version=%s", (tn, new_v, new_v))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"bump_version err: {e}")
+
+# ========== 表格定义 ==========
+TABLE_SCHEMAS = {
+    "销售表": {"columns": ["编号","订单编号","订单日期","收料单位","供应商名称","单品编码","商品名称","品牌","单位","数量","单价（含税）","订单小计（含税）","业绩归属","备注"]},
+    "利润表": {"columns": ["编号","日期","订单编号","商品名称","供应商名称","收入","成本","毛利","毛利率","备注"]},
+    "采购成本表": {"columns": ["编号","日期","供应商名称","商品名称","数量","单位","单价","金额","备注"]},
+    "费用表": {"columns": ["编号","日期","费用类别","金额","备注"]},
+    "收款表": {"columns": ["编号","日期","客户名称","金额","收款方式","备注"]},
+    "每日流水": {"columns": ["编号","日期","类别","收入","支出","余额","备注"]},
+    "客户统计表": {"columns": ["编号","客户名称","联系人","电话","地址","备注"]},
+    "承包确认单": {"columns": ["编号","日期","承包方","项目名称","金额","备注"]},
+    "平台结算折扣率": {"columns": ["编号","平台名称","折扣率","备注"]},
+}
+
+ALL_TABLES = list(TABLE_SCHEMAS.keys())
+
+# ========== 数据库操作 ==========
+def insert_row(tn, rd):
+    cols = TABLE_SCHEMAS[tn]["columns"]
+    filtered = {c: rd.get(c, "") for c in cols if c in rd}
+    bh = str(filtered.get("编号","")).strip()
+    if bh:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT id FROM `{tn}` WHERE `编号`=%s", (bh,))
+            if cur.fetchone():
+                conn.close()
+                return {"_error": True, "_dup_bianhao": bh}
+        conn.close()
+    keys = list(filtered.keys())
+    if not keys: return {"_error": True}
+    cnames = ", ".join([f"`{k}`" for k in keys])
+    phs = ", ".join(["%s"]*len(keys))
+    vals = [str(filtered[k]) for k in keys]
+    conn = get_db()
+    with conn.cursor() as cur:
+        cur.execute(f"INSERT INTO `{tn}` ({cnames}) VALUES ({phs})", vals)
+        rid = cur.lastrowid
+    conn.commit(); conn.close()
+    filtered["_id"] = rid
+    return filtered
+
+def query_rows(tn, limit=100000):
+    try:
+        c = get_db()
+        with c.cursor() as cur:
+            cur.execute(f"SELECT * FROM `{tn}` ORDER BY id ASC LIMIT {limit}")
+            rows = [fix_dt(r) for r in cur.fetchall()]
+        c.close()
+        return rows
+    except Exception as e:
+        print(f"query err: {e}")
+        return []
+
+def clear_rows(tn):
+    c = get_db()
+    with c.cursor() as cur:
+        cur.execute(f"DELETE FROM `{tn}`")
+    c.commit(); c.close()
+
+def search_rows(tn, kw, limit=100000):
+    cols = [c for c in TABLE_SCHEMAS[tn]["columns"] if c not in ("id","_id")]
+    conds = " OR ".join([f"`{c}` LIKE %s" for c in cols])
+    params = [f"%{kw}%"] * len(cols)
+    try:
+        c = get_db()
+        with c.cursor() as cur:
+            cur.execute(f"SELECT * FROM `{tn}` WHERE {conds} ORDER BY id ASC LIMIT {limit}", params)
+            rows = [fix_dt(r) for r in cur.fetchall()]
+        c.close()
+        return rows
+    except Exception as e:
+        print(f"search err: {e}")
+        return []
+
+def count_rows(tn):
+    try:
+        c = get_db()
+        with c.cursor() as cur:
+            cur.execute(f"SELECT COUNT(*) as cnt FROM `{tn}`")
+            return cur.fetchone()["cnt"]
+        c.close()
+    except:
+        return 0
+
+def get_all_tables_data():
+    result = {}
+    for tn, sc in TABLE_SCHEMAS.items():
+        rows = query_rows(tn)
+        result[tn] = {"headers": sc["columns"], "rows": rows, "row_count": len(rows), "version": _table_versions.get(tn, 0)}
+    return result
+
+
+# ========== JWT 鉴权中间件 ==========
+# 通过调用 Node.js /api/auth/validate 接口验证 token 有效性
+# 超时设置 3 秒，避免 Node.js 不可用时 Python 服务阻塞
+VALIDATE_URL = "http://127.0.0.1:3000/api/auth/validate"
+VALIDATE_TIMEOUT = 3  # 秒
+
+
+def verify_jwt():
+    """从 Authorization header 提取 Bearer token 并验证，返回用户信息或 None"""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
+
+    token = auth_header[len("Bearer "):]
+    if not token:
+        return None
+
+    try:
+        resp = requests.get(
+            VALIDATE_URL,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=VALIDATE_TIMEOUT
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("valid") and data.get("user"):
+                return data["user"]
+    except requests.exceptions.Timeout:
+        print(f"[JWT] Node.js 验证接口超时({VALIDATE_TIMEOUT}s)")
+    except requests.exceptions.ConnectionError:
+        print("[JWT] Node.js 服务不可达(127.0.0.1:3000)")
+    except Exception as e:
+        print(f"[JWT] 验证异常: {e}")
+    return None
+
+
+@app.before_request
+def jwt_guard():
+    """每次请求前验证 JWT token，未通过返回 401"""
+    # 健康检查接口放行，供监控系统使用
+    if request.path == "/api/health":
+        return None
+
+    user = verify_jwt()
+    if user is None:
+        return jsonify({
+            "code": "TOKEN_INVALID",
+            "redirect_url": "/login.html"
+        }), 401
+
+    # 验证通过，挂载用户信息到 flask.request.user
+    request.user = user
+
+# ========== API ==========
+@app.route("/api/health")
+def health():
+    try:
+        c = get_db()
+        c.close()
+        return jsonify({"status": "ok", "database": "MariaDB"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/api/tables/version")
+def version_api():
+    return jsonify(dict(_table_versions))
+
+@app.route("/api/tables")
+def tables_api():
+    return jsonify(get_all_tables_data())
+
+@app.route("/api/tables/<table_name>")
+def table_api(table_name):
+    if table_name not in TABLE_SCHEMAS:
+        return jsonify({"error": "unknown"}), 404
+    rows = query_rows(table_name)
+    return jsonify({"headers": TABLE_SCHEMAS[table_name]["columns"], "rows": rows, "row_count": len(rows)})
+
+@app.route("/api/tables/<table_name>/sync", methods=["PUT"])
+def sync_api(table_name):
+    if table_name not in TABLE_SCHEMAS:
+        return jsonify({"error": "unknown"}), 404
+    data = request.get_json(silent=True)
+    if not data or "rows" not in data:
+        return jsonify({"error": "missing rows"}), 400
+    rows = data["rows"]
+    if len(rows) > 5:
+        return jsonify({"error": "full sync blocked, refresh page"}), 400
+
+    inserted, updated = 0, 0
+    for r in rows:
+        if not isinstance(r, dict): continue
+        bh = str(r.get("编号","")).strip()
+        if not bh: continue
+        filtered = {c: r.get(c, "") for c in TABLE_SCHEMAS[table_name]["columns"] if c in r}
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT id FROM `{table_name}` WHERE `编号`=%s", (bh,))
+            ex = cur.fetchone()
+        if ex:
+            sets = ", ".join([f"`{k}`=%s" for k in filtered])
+            vs = [str(filtered[k]) for k in filtered] + [ex["id"]]
+            with conn.cursor() as cur:
+                cur.execute(f"UPDATE `{table_name}` SET {sets} WHERE id=%s", vs)
+            updated += 1
+        else:
+            ks = list(filtered.keys())
+            cns = ", ".join([f"`{k}`" for k in ks])
+            phs = ", ".join(["%s"]*len(ks))
+            vs = [str(filtered[k]) for k in ks]
+            with conn.cursor() as cur:
+                cur.execute(f"INSERT INTO `{table_name}` ({cns}) VALUES ({phs})", vs)
+            inserted += 1
+        conn.commit(); conn.close()
+    bump_version(table_name)
+    return jsonify({"success": True, "inserted": inserted, "updated": updated, "version": _table_versions[table_name]})
+
+@app.route("/api/tables/<table_name>/rows/delete", methods=["POST"])
+def delete_api(table_name):
+    if table_name not in TABLE_SCHEMAS: return jsonify({"error": "unknown"}), 404
+    data = request.get_json(silent=True)
+    bhs = (data or {}).get("bianhaos", [])
+    if not bhs: return jsonify({"error": "no bianhaos"}), 400
+    phs = ", ".join(["%s"]*len(bhs))
+    conn = get_db()
+    with conn.cursor() as cur:
+        cur.execute(f"DELETE FROM `{table_name}` WHERE `编号` IN ({phs})", bhs)
+        deleted = cur.rowcount
+    conn.commit(); conn.close()
+    bump_version(table_name)
+    return jsonify({"success": True, "deleted": deleted})
+
+@app.route("/api/tables/<table_name>/import", methods=["POST"])
+def import_api(table_name):
+    if table_name not in TABLE_SCHEMAS: return jsonify({"error": "unknown"}), 404
+    data = request.get_json(silent=True)
+    rows = (data or {}).get("rows", [])
+    inserted = []
+    for r in rows:
+        rec = insert_row(table_name, r)
+        if not rec.get("_error"):
+            inserted.append(rec)
+    bump_version(table_name)
+    return jsonify({"success": True, "inserted": len(inserted), "version": _table_versions[table_name]})
+
+# ========== 启动 ==========
+load_versions()
+print(f"[Table Server] MariaDB ready, {len(_table_versions)} tables")
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=8086, debug=False)

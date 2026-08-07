@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>商品图片管理 - 埠勤商贸</title>
+  <style>
+    :root {
+      --bg: #f5f6fa;
+      --card-bg: #fff;
+      --primary: #4f6ef7;
+      --primary-hover: #3b5de7;
+      --danger: #e74c3c;
+      --success: #27ae60;
+      --border: #e8ecf1;
+      --text: #2c3e50;
+      --text-light: #7f8c8d;
+      --radius: 10px;
+      --shadow: 0 2px 12px rgba(0,0,0,.06);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* 顶部导航 */
+    .topbar {
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: var(--shadow);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .topbar .logo { font-size: 18px; font-weight: 700; color: var(--primary); }
+    .topbar nav { display:flex; gap:20px; }
+    .topbar nav a { color: var(--text-light); text-decoration: none; font-size: 14px; padding: 4px 0; border-bottom: 2px solid transparent; transition: .2s; }
+    .topbar nav a:hover, .topbar nav a.active { color: var(--primary); border-color: var(--primary); }
+
+    .container { max-width: 1300px; margin: 0 auto; padding: 24px; }
+
+    /* 工具栏 */
+    .toolbar {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .toolbar select, .toolbar input, .toolbar button {
+      padding: 10px 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      transition: .2s;
+    }
+    .toolbar select { min-width: 280px; background: #fff; cursor: pointer; }
+    .toolbar select:focus { border-color: var(--primary); }
+    .toolbar .btn {
+      cursor: pointer;
+      font-weight: 500;
+      border: none;
+      color: #fff;
+      background: var(--primary);
+    }
+    .toolbar .btn:hover { background: var(--primary-hover); }
+    .toolbar .btn-outline {
+      background: #fff;
+      color: var(--primary);
+      border: 1px solid var(--primary);
+      cursor: pointer;
+    }
+    .toolbar .btn-outline:hover { background: #f0f3ff; }
+    .toolbar .btn-danger { background: var(--danger); }
+    .toolbar .btn-danger:hover { background: #c0392b; }
+    .toolbar .spacer { flex: 1; }
+    .toolbar .stats { font-size: 13px; color: var(--text-light); }
+
+    /* 图片区域 */
+    .section {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow);
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-title { font-size: 16px; font-weight: 600; }
+    .section-title .badge {
+      display: inline-block;
+      background: var(--primary);
+      color: #fff;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      margin-left: 8px;
+    }
+    .section-title .badge.detail { background: var(--success); }
+
+    /* 图片网格 */
+    .image-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 16px;
+    }
+    .image-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+      transition: .2s;
+      cursor: grab;
+      position: relative;
+    }
+    .image-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); }
+    .image-card.dragging { opacity: .5; border: 2px dashed var(--primary); }
+    .image-card.drag-over { border: 2px solid var(--primary); background: #f0f3ff; }
+    .image-card .img-wrap {
+      width: 100%;
+      height: 160px;
+      background: #f8f9fa;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .image-card .img-wrap img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .image-card .img-wrap .placeholder {
+      font-size: 40px;
+      color: #ddd;
+    }
+    .image-card .sort-badge {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      background: rgba(0,0,0,.6);
+      color: #fff;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      z-index: 2;
+    }
+    .image-card .card-actions {
+      display: flex;
+      gap: 4px;
+      padding: 8px;
+      border-top: 1px solid var(--border);
+    }
+    .image-card .card-actions button {
+      flex: 1;
+      padding: 5px 6px;
+      font-size: 11px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: #fff;
+      cursor: pointer;
+      transition: .2s;
+    }
+    .image-card .card-actions button:hover { background: #f0f3ff; }
+    .image-card .card-actions .btn-del { color: var(--danger); }
+    .image-card .card-actions .btn-del:hover { background: #fdecea; }
+    .image-card .card-actions .btn-view { color: var(--primary); }
+    .image-card .card-actions .btn-type { color: var(--text-light); }
+
+    /* 上传卡片 */
+    .upload-card {
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-light);
+      cursor: pointer;
+      transition: .2s;
+      min-height: 224px;
+    }
+    .upload-card:hover { border-color: var(--primary); color: var(--primary); background: #f8f9ff; }
+    .upload-card .plus { font-size: 36px; margin-bottom: 8px; }
+    .upload-card .text { font-size: 13px; }
+
+    /* 预览弹窗 */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,.85);
+      z-index: 999;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-overlay img {
+      max-width: 90vw;
+      max-height: 90vh;
+      object-fit: contain;
+      border-radius: 4px;
+    }
+    .modal-close {
+      position: fixed;
+      top: 20px;
+      right: 30px;
+      font-size: 32px;
+      color: #fff;
+      cursor: pointer;
+      z-index: 1000;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #333;
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      z-index: 1001;
+      animation: fadeIn .3s;
+      box-shadow: 0 4px 16px rgba(0,0,0,.2);
+    }
+    .toast.success { background: var(--success); }
+    .toast.error { background: var(--danger); }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(-10px); } to { opacity:1; transform:translateY(0); } }
+
+    /* 响应式 */
+    @media (max-width: 768px) {
+      .toolbar { flex-direction: column; align-items: stretch; }
+      .image-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+    }
+
+    /* 加载 */
+    .loading { text-align: center; padding: 40px; color: var(--text-light); }
+    .spinner {
+      display: inline-block;
+      width: 24px; height: 24px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-state { text-align: center; padding: 60px; color: var(--text-light); }
+    .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<div class="topbar">
+  <div class="logo">📦 埠勤商贸 - 图片管理</div>
+  <nav>
+    <a href="/mall/admin.html">商品管理</a>
+    <a href="/mall/images.html" class="active">图片管理</a>
+  </nav>
+</div>
+
+<div class="container">
+  <!-- 工具栏 -->
+  <div class="toolbar">
+    <select id="productSelect">
+      <option value="">-- 选择商品 --</option>
+    </select>
+    <button class="btn" onclick="loadImages()">📋 加载图片</button>
+    <button class="btn-outline" id="btnDownload" onclick="downloadJdImages()" style="display:none">
+      ⬇️ 下载京东图片到本地
+    </button>
+    <span class="spacer"></span>
+    <span class="stats" id="statsText">请先选择商品</span>
+  </div>
+
+  <!-- 主图区域 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">
+        🖼️ 商品主图 <span class="badge" id="mainBadge">0</span>
+      </div>
+      <div>
+        <span style="font-size:12px;color:var(--text-light);margin-right:8px;">提示：拖拽图片可排序，建议3-5张</span>
+        <button class="btn btn-outline" onclick="batchDelete('main')" style="padding:6px 12px;font-size:12px;">🗑 删除选中</button>
+      </div>
+    </div>
+    <div class="image-grid" id="mainGrid">
+      <div class="empty-state"><div class="icon">📷</div><p>暂无主图</p></div>
+    </div>
+    <input type="file" id="mainUpload" accept="image/*" multiple style="display:none" onchange="handleUpload('main', this)">
+  </div>
+
+  <!-- 详情图区域 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">
+        📋 商品详情图 <span class="badge detail" id="detailBadge">0</span>
+      </div>
+      <button class="btn btn-outline" onclick="batchDelete('detail')" style="padding:6px 12px;font-size:12px;">🗑 删除选中</button>
+    </div>
+    <div class="image-grid" id="detailGrid">
+      <div class="empty-state"><div class="icon">📋</div><p>暂无详情图</p></div>
+    </div>
+    <input type="file" id="detailUpload" accept="image/*" multiple style="display:none" onchange="handleUpload('detail', this)">
+  </div>
+</div>
+
+<!-- 预览弹窗 -->
+<div class="modal-overlay" id="modal" onclick="closeModal()">
+  <span class="modal-close">&times;</span>
+  <img id="modalImg" src="" alt="预览">
+</div>
+
+<script>
+const API = '/api/products';
+let currentProductId = null;
+let allImages = { main_images: [], detail_images: [] };
+
+// ========== 初始化 ==========
+(async function init() {
+  await loadProductList();
+  const urlParams = new URLSearchParams(window.location.search);
+  const pid = urlParams.get('id');
+  if (pid) {
+    document.getElementById('productSelect').value = pid;
+    await loadImages();
+  }
+})();
+
+async function loadProductList() {
+  try {
+    const res = await fetch(`${API}?limit=500`);
+    const json = await res.json();
+    const select = document.getElementById('productSelect');
+    const products = json.data || json.products || [];
+    products.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = `[${p.id}] ${p.name || p.display_name || '未命名'}`;
+      if (p.jd_item_id) opt.textContent += ` (京东:${p.jd_item_id})`;
+      select.appendChild(opt);
+    });
+  } catch (e) {
+    console.error('加载产品列表失败:', e);
+  }
+}
+
+// ========== 加载图片 ==========
+async function loadImages() {
+  const pid = document.getElementById('productSelect').value;
+  if (!pid) {
+    showToast('请先选择商品', 'error');
+    return;
+  }
+  currentProductId = pid;
+
+  const grid = (id) => document.getElementById(id);
+  grid('mainGrid').innerHTML = '<div class="loading"><div class="spinner"></div><p>加载中...</p></div>';
+  grid('detailGrid').innerHTML = '<div class="loading"><div class="spinner"></div><p>加载中...</p></div>';
+
+  try {
+    const res = await fetch(`${API}/${pid}/images`);
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message);
+
+    allImages = json.data;
+
+    document.getElementById('mainBadge').textContent = allImages.main_count;
+    document.getElementById('detailBadge').textContent = allImages.detail_count;
+    document.getElementById('statsText').textContent =
+      `商品: ${json.data.product_name} | 主图 ${allImages.main_count} 张 | 详情图 ${allImages.detail_count} 张`;
+
+    // 检测是否有京东原始URL（需下载）
+    const hasJdUrls = allImages.main_images.some(i => i.original_url && i.original_url.includes('360buyimg'))
+      || allImages.detail_images.some(i => i.original_url && i.original_url.includes('360buyimg'));
+    document.getElementById('btnDownload').style.display = hasJdUrls ? '' : 'none';
+
+    renderGrid('main', allImages.main_images);
+    renderGrid('detail', allImages.detail_images);
+  } catch (e) {
+    showToast('加载失败: ' + e.message, 'error');
+  }
+}
+
+function renderGrid(type, images) {
+  const grid = document.getElementById(type === 'main' ? 'mainGrid' : 'detailGrid');
+  if (images.length === 0) {
+    grid.innerHTML = `<div class="empty-state"><div class="icon">${type==='main'?'📷':'📋'}</div><p>暂无${type==='main'?'主':'详情'}图</p></div>`;
+    addUploadCard(grid, type);
+    return;
+  }
+
+  let html = '';
+  images.forEach((img, idx) => {
+    html += `
+      <div class="image-card" draggable="true"
+           data-id="${img.id}" data-type="${img.image_type}" data-sort="${idx + 1}"
+           ondragstart="handleDragStart(event)" ondragover="handleDragOver(event)"
+           ondragenter="handleDragEnter(event)" ondragleave="handleDragLeave(event)"
+           ondrop="handleDrop(event)" ondragend="handleDragEnd(event)">
+        <div class="sort-badge">#${idx + 1}</div>
+        <div class="img-wrap" onclick="previewImage('${escapeHtml(img.image_url)}')">
+          <img src="${escapeHtml(img.image_url)}" alt="${type} ${idx+1}" loading="lazy"
+               onerror="this.parentElement.innerHTML='<span class=placeholder>🖼</span>'">
+        </div>
+        <div class="card-actions">
+          <button class="btn-view" onclick="previewImage('${escapeHtml(img.image_url)}')">👁 查看</button>
+          <button class="btn-type" onclick="toggleType(${img.id}, '${img.image_type === 'main' ? 'detail' : 'main'}')">
+            ${img.image_type === 'main' ? '→详情' : '→主图'}
+          </button>
+          <button class="btn-del" onclick="deleteImage(${img.id})">✕ 删除</button>
+        </div>
+      </div>`;
+  });
+
+  // 添加上传占位卡片
+  html += `
+    <div class="upload-card" onclick="document.getElementById('${type}Upload').click()">
+      <div class="plus">＋</div>
+      <div class="text">添加${type === 'main' ? '主' : '详情'}图</div>
+    </div>`;
+
+  grid.innerHTML = html;
+}
+
+function addUploadCard(grid, type) {
+  const card = document.createElement('div');
+  card.className = 'upload-card';
+  card.innerHTML = `<div class="plus">＋</div><div class="text">添加${type === 'main' ? '主' : '详情'}图</div>`;
+  card.onclick = () => document.getElementById(`${type}Upload`).click();
+  grid.appendChild(card);
+}
+
+// ========== 拖拽排序 ==========
+let dragSrcEl = null;
+
+function handleDragStart(e) {
+  dragSrcEl = this;
+  this.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', this.dataset.id);
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  this.classList.add('drag-over');
+}
+
+function handleDragEnter(e) {
+  e.preventDefault();
+  this.classList.add('drag-over');
+}
+
+function handleDragLeave(e) {
+  // 只有真正离开当前卡片时才移除高亮
+  if (!this.contains(e.relatedTarget)) {
+    this.classList.remove('drag-over');
+  }
+}
+
+function handleDragLeave(e) {
+  this.classList.remove('drag-over');
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  this.classList.remove('drag-over');
+
+  if (!dragSrcEl || dragSrcEl === this) return;
+  if (dragSrcEl.dataset.type !== this.dataset.type) return; // 不能跨类型拖拽
+
+  const type = dragSrcEl.dataset.type;
+  const grid = document.getElementById(type === 'main' ? 'mainGrid' : 'detailGrid');
+  const cards = [...grid.querySelectorAll('.image-card')];
+
+  // 交换DOM位置
+  const srcIdx = cards.indexOf(dragSrcEl);
+  const targetIdx = cards.indexOf(this);
+  if (targetIdx > srcIdx) {
+    grid.insertBefore(dragSrcEl, this.nextSibling);
+  } else {
+    grid.insertBefore(dragSrcEl, this);
+  }
+
+  // 更新序号和发送排序请求
+  updateSortOrder(type);
+}
+
+function handleDragEnd(e) {
+  this.classList.remove('dragging');
+  document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+}
+
+function updateSortOrder(type) {
+  const grid = document.getElementById(type === 'main' ? 'mainGrid' : 'detailGrid');
+  const cards = [...grid.querySelectorAll('.image-card')].filter(c => c.dataset.id);
+  const items = cards.map((card, idx) => ({
+    id: parseInt(card.dataset.id),
+    sort_order: idx + 1,
+    image_type: type,
+  }));
+
+  // 更新本地序号显示
+  cards.forEach((card, idx) => {
+    card.querySelector('.sort-badge').textContent = `#${idx + 1}`;
+  });
+
+  fetch(`${API}/${currentProductId}/images/reorder`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  })
+    .then(r => r.json())
+    .then(j => { if (j.success) showToast('排序已保存', 'success'); })
+    .catch(e => showToast('排序保存失败', 'error'));
+}
+
+// ========== 图片操作 ==========
+function previewImage(url) {
+  document.getElementById('modalImg').src = url;
+  document.getElementById('modal').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('show');
+}
+
+async function deleteImage(imageId) {
+  if (!confirm('确定要删除这张图片吗？')) return;
+  try {
+    const res = await fetch(`${API}/images/${imageId}`, { method: 'DELETE' });
+    const json = await res.json();
+    if (json.success) {
+      showToast('已删除', 'success');
+      loadImages();
+    } else {
+      showToast(json.message || '删除失败', 'error');
+    }
+  } catch (e) {
+    showToast('删除失败: ' + e.message, 'error');
+  }
+}
+
+async function toggleType(imageId, newType) {
+  try {
+    const res = await fetch(`${API}/images/${imageId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_type: newType }),
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast(`已改为${newType === 'main' ? '主图' : '详情图'}`, 'success');
+      loadImages();
+    }
+  } catch (e) {
+    showToast('操作失败', 'error');
+  }
+}
+
+async function batchDelete(type) {
+  const images = type === 'main' ? allImages.main_images : allImages.detail_images;
+  if (images.length === 0) return showToast('没有可删除的图片', 'error');
+  if (!confirm(`确定删除全部 ${images.length} 张${type === 'main' ? '主' : '详情'}图？`)) return;
+
+  let count = 0;
+  for (const img of images) {
+    try {
+      await fetch(`${API}/images/${img.id}`, { method: 'DELETE' });
+      count++;
+    } catch (e) {}
+  }
+  showToast(`已删除 ${count} 张`, 'success');
+  loadImages();
+}
+
+// ========== 上传 ==========
+async function handleUpload(type, input) {
+  const files = input.files;
+  if (!files || files.length === 0) return;
+
+  const maxSort = type === 'main'
+    ? allImages.main_images.length
+    : allImages.detail_images.length;
+
+  for (let i = 0; i < files.length; i++) {
+    const formData = new FormData();
+    formData.append('image', files[i]);
+    formData.append('image_type', type);
+    formData.append('sort_order', maxSort + i + 1);
+
+    try {
+      const res = await fetch(`${API}/${currentProductId}/images/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      const json = await res.json();
+      if (!json.success) console.error('上传失败:', json.message);
+    } catch (e) {
+      console.error('上传出错:', e);
+    }
+  }
+
+  showToast(`上传完成: ${files.length} 张`, 'success');
+  input.value = '';
+  loadImages();
+}
+
+// ========== 下载京东图片 ==========
+async function downloadJdImages() {
+  if (!currentProductId) return;
+
+  // 收集所有京东原始URL
+  const urls = [
+    ...allImages.main_images.map((img, i) => ({ url: img.original_url || img.image_url, type: 'main', sort: i + 1 })),
+    ...allImages.detail_images.map((img, i) => ({ url: img.original_url || img.image_url, type: 'detail', sort: i + 1 })),
+  ].filter(u => u.url && u.url.startsWith('http'));
+
+  if (urls.length === 0) {
+    return showToast('没有需要下载的京东图片URL', 'error');
+  }
+
+  showToast(`开始下载 ${urls.length} 张图片...`, 'success');
+
+  const btn = document.getElementById('btnDownload');
+  btn.disabled = true;
+  btn.textContent = '⬇️ 下载中...';
+
+  try {
+    const res = await fetch(`${API}/${currentProductId}/images/download`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ urls }),
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast(json.message, 'success');
+    } else {
+      showToast('下载失败: ' + (json.message || '未知错误'), 'error');
+    }
+  } catch (e) {
+    showToast('下载请求失败: ' + e.message, 'error');
+  }
+
+  btn.disabled = false;
+  btn.textContent = '⬇️ 下载京东图片到本地';
+  loadImages();
+}
+
+// ========== 工具函数 ==========
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function showToast(msg, type) {
+  const toast = document.createElement('div');
+  toast.className = `toast ${type || ''}`;
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+// 键盘关闭弹窗
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeModal();
+});
+</script>
+</body>
+</html>

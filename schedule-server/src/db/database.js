@@ -222,6 +222,24 @@ async function createDatabase() {
       created_at TEXT DEFAULT (datetime('now','localtime')),
       updated_at TEXT DEFAULT (datetime('now','localtime'))
     );
+    -- 草稿表字段升级（兼容已有数据库）
+    -- 注意：sql.js(WASM) 不支持 ALTER TABLE ... ADD COLUMN IF NOT EXISTS 语法，
+    -- 改用 JS 检测列是否存在后逐个添加
+    `);
+
+    // 动态添加 drafts 表缺失字段（兼容旧数据库）
+    const draftColumns = db.prepare('PRAGMA table_info(drafts)').all().map(c => c.name);
+    const draftAddColumns = [
+      'start_time', 'end_time', 'deadline', 'location', 'person', 'amount', 'target_module', 'priority',
+      'suggest_module', 'user_selected_module', 'apply_type',
+    ];
+    for (const col of draftAddColumns) {
+      if (!draftColumns.includes(col)) {
+        const def = col === 'target_module' || col === 'suggest_module' || col === 'user_selected_module' ? "'schedule'" : (col === 'priority' ? "'中'" : "''");
+        db.exec(`ALTER TABLE drafts ADD COLUMN ${col} TEXT DEFAULT ${def}`);
+      }
+    }
+    db.exec(`
 
     -- 【新增】每日记录表 - 正式归档记录，长期持久存储
     CREATE TABLE IF NOT EXISTS daily_records (
@@ -293,6 +311,19 @@ async function createDatabase() {
       updated_at TEXT DEFAULT (datetime('now','localtime'))
     );
 
+    -- 【新增】用户表（含角色和上下级关系 + 密码登录）
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL DEFAULT '',
+      password_hash TEXT NOT NULL DEFAULT '',
+      name TEXT NOT NULL DEFAULT '',
+      role TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('admin', 'staff')),
+      manager_id TEXT DEFAULT NULL,
+      department TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      updated_at TEXT DEFAULT (datetime('now','localtime'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_schedules_status ON schedules(status);
     CREATE INDEX IF NOT EXISTS idx_schedules_start_time ON schedules(start_time);
     CREATE INDEX IF NOT EXISTS idx_schedules_type ON schedules(type);
@@ -354,6 +385,22 @@ async function createDatabase() {
   try {
     db.prepare("ALTER TABLE daily_records ADD COLUMN distributed_schedule_id INTEGER NULL").run();
   } catch (e) { /* 字段已存在 */ }
+  // 草稿关联字段：存入时从 drafts 表同步
+  try {
+    db.prepare("ALTER TABLE daily_records ADD COLUMN priority TEXT DEFAULT '中'").run();
+  } catch (e) { /* 字段已存在 */ }
+  try {
+    db.prepare("ALTER TABLE daily_records ADD COLUMN location TEXT DEFAULT ''").run();
+  } catch (e) { /* 字段已存在 */ }
+  try {
+    db.prepare("ALTER TABLE daily_records ADD COLUMN person TEXT DEFAULT ''").run();
+  } catch (e) { /* 字段已存在 */ }
+  try {
+    db.prepare("ALTER TABLE daily_records ADD COLUMN start_time TEXT DEFAULT ''").run();
+  } catch (e) { /* 字段已存在 */ }
+  try {
+    db.prepare("ALTER TABLE daily_records ADD COLUMN end_time TEXT DEFAULT ''").run();
+  } catch (e) { /* 字段已存在 */ }
 
   // 兼容：chat_history 添加 session_id 字段（会话分组）
   try {
@@ -362,6 +409,32 @@ async function createDatabase() {
   } catch (e) {
     // 字段已存在
   }
+
+  // ===== 审批流程升级：applications 表追加审批字段 =====
+  try { db.prepare("ALTER TABLE applications ADD COLUMN expected_time TEXT DEFAULT ''").run(); } catch (e) { /* 已存在 */ }
+  try { db.prepare("ALTER TABLE applications ADD COLUMN approve_user_id TEXT DEFAULT ''").run(); } catch (e) { /* 已存在 */ }
+  try { db.prepare("ALTER TABLE applications ADD COLUMN approve_comment TEXT DEFAULT ''").run(); } catch (e) { /* 已存在 */ }
+  try { db.prepare("ALTER TABLE applications ADD COLUMN approve_time TEXT DEFAULT ''").run(); } catch (e) { /* 已存在 */ }
+
+  // ===== 审批流程升级：expenses 表追加审批字段 =====
+  try { db.prepare("ALTER TABLE expenses ADD COLUMN approve_user_id TEXT DEFAULT ''").run(); } catch (e) { /* 已存在 */ }
+  try { db.prepare("ALTER TABLE expenses ADD COLUMN approve_comment TEXT DEFAULT ''").run(); } catch (e) { /* 已存在 */ }
+  try { db.prepare("ALTER TABLE expenses ADD COLUMN approve_time TEXT DEFAULT ''").run(); } catch (e) { /* 已存在 */ }
+
+  // ===== 创建用户表索引 =====
+  try { db.prepare("CREATE INDEX IF NOT EXISTS idx_users_manager ON users(manager_id)").run(); } catch (e) { /* 已存在 */ }
+  try { db.prepare("CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)").run(); } catch (e) { /* 已存在 */ }
+
+  // ===== 密码登录升级：users 表追加 username + password_hash =====
+  try { db.prepare("ALTER TABLE users ADD COLUMN username TEXT NOT NULL DEFAULT ''").run(); } catch (e) { /* 已存在 */ }
+  try { db.prepare("ALTER TABLE users ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''").run(); } catch (e) { /* 已存在 */ }
+  // try { db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)").run(); } catch (e) { /* 已存在 */ }
+try { db.prepare("DROP INDEX IF EXISTS idx_users_username").run(); } catch (e) { /* 索引不存在 */ }
+  // ===== 阶段1 身份准入 =====
+  try { db.prepare("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'").run(); } catch (e) { /* 已存在 */ }
+  try { db.prepare("ALTER TABLE users ADD COLUMN is_boss INTEGER NOT NULL DEFAULT 0").run(); } catch (e) { /* 已存在 */ }
+  try { db.prepare("CREATE INDEX IF NOT EXISTS idx_users_status ON users(status)").run(); } catch (e) { /* 已存在 */ }
+  try { db.prepare("CREATE INDEX IF NOT EXISTS idx_users_is_boss ON users(is_boss)").run(); } catch (e) { /* 已存在 */ }
 
   // 修复历史提醒时间
   function parseLocalDateTime(str) {

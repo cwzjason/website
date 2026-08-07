@@ -15,6 +15,22 @@ const upload = multer({ dest: uploadDir, limits: { fileSize: 10 * 1024 * 1024 } 
 
 module.exports = function (db) {
 
+  // ===== 辅助：判断时间是否已过期 =====
+  function isPastTime(timeStr) {
+    if (!timeStr) return false;
+    const trimmed = String(timeStr).trim();
+    const now = new Date();
+    // 仅日期（如 "2026-08-05"），按天比较
+    if (trimmed.length === 10 && /^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const d = new Date(trimmed + 'T00:00:00');
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      return d < today;
+    }
+    // 带时间的完整字符串
+    const d = new Date(trimmed.replace(' ', 'T'));
+    return !isNaN(d) && d < now;
+  }
+
   // ===== 辅助：自动同步今日日程到每日记录 =====
   function autoSyncToDailyRecord(db, openid, title, description, start_time, type, location, person) {
     try {
@@ -66,6 +82,11 @@ module.exports = function (db) {
     if (!text) return res.status(400).json({ success: false, error: '请提供文本内容' });
 
     const parsed = aiParse(text, { typeHint });
+
+    // 禁止创建过去时间的日程（只允许未来的时间）
+    if (parsed.start_time && isPastTime(parsed.start_time)) {
+      return res.status(400).json({ success: false, error: '不能创建过去时间的日程，请使用未来的时间' });
+    }
     const stmt = db.prepare(`
       INSERT INTO schedules
         (title, start_time, end_time, type, priority, person, location, reminder_minutes, repeat_type, status, raw_text, source_type, openid)
@@ -103,6 +124,36 @@ module.exports = function (db) {
     const { title, start_time, end_time, type, priority, person, location, description, sourceType = 'ai', reminder_minutes_list, openid = '' } = req.body;
     if (!title) return res.status(400).json({ success: false, error: '缺少标题' });
 
+    // 规范化枚举值（AI 可能返回中文，这里做兜底转换）
+    const TYPE_MAP = { '日程': 'event', '会议': 'meeting', '任务': 'task', '提醒': 'remind' };
+    const PRIORITY_MAP = { '高': 'high', '中': 'medium', '低': 'low' };
+    const normalizedType = TYPE_MAP[type] || type || 'event';
+    const normalizedPriority = PRIORITY_MAP[priority] || priority || 'medium';
+
+    // 时间默认值：不能用空字符串，否则前端按日期过滤时永远查不到
+    // 同时规范化时间格式（AI 可能返回 "2026-08-05 15:00" 而非 ISO 8601）
+    const normalizeTime = (t) => {
+      if (!t || !String(t).trim()) return null;
+      let ts = String(t).trim();
+      // 替换空格为 T（修复 "2026-08-05 15:00" 格式）
+      ts = ts.replace(' ', 'T');
+      // 补全秒数（如果只有日期）
+      if (ts.length === 10) ts += 'T00:00:00';
+      // 只补全缺失的部分：如果已有时:分但缺秒，补秒
+      if (ts.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)) ts += ':00';
+      // 保留为本地时间，不附加 Z 时区标记（确保前后端一致显示北京时间）
+      return ts;
+    };
+    const nowISO = new Date().toISOString();
+    const oneHourLater = new Date(Date.now() + 3600000).toISOString();
+    const validStart = normalizeTime(start_time) || nowISO;
+    const validEnd = normalizeTime(end_time) || oneHourLater;
+
+    // 禁止创建过去时间的日程
+    if (validStart && validStart !== nowISO && isPastTime(validStart)) {
+      return res.status(400).json({ success: false, error: '不能创建过去时间的日程，请使用未来的时间' });
+    }
+
     const stmt = db.prepare(`
       INSERT INTO schedules
         (title, description, start_time, end_time, type, priority, person, location, reminder_minutes, repeat_type, status, raw_text, source_type, openid)
@@ -111,10 +162,10 @@ module.exports = function (db) {
     const info = stmt.run(
       title,
       description || '',
-      start_time || '',
-      end_time || '',
-      type || '日程',
-      priority || '中',
+      validStart,
+      validEnd,
+      normalizedType,
+      normalizedPriority,
       person || '',
       location || '',
       0,
@@ -127,21 +178,21 @@ module.exports = function (db) {
 
     const scheduleId = info.lastInsertRowid;
 
-    if (start_time) {
+    if (validStart) {
       const minutesList = Array.isArray(reminder_minutes_list) && reminder_minutes_list.length > 0
         ? reminder_minutes_list
         : null;
       try {
-        createDefaultReminders(db, scheduleId, start_time, minutesList);
+        createDefaultReminders(db, scheduleId, validStart, minutesList);
       } catch (e) {
         console.warn('创建默认提醒失败:', e.message);
       }
     }
 
     // 自动写入每日记录（仅当日程日期为今天时）
-    autoSyncToDailyRecord(db, openid, title, description, start_time, type, undefined, location, person);
+    autoSyncToDailyRecord(db, openid, title, description, validStart, normalizedType, undefined, location, person);
 
-    res.json({ success: true, data: { id: scheduleId, title, start_time, end_time, type, priority, person, location, description } });
+    res.json({ success: true, data: { id: scheduleId, title, start_time: validStart, end_time: validEnd, type: normalizedType, priority: normalizedPriority, person, location, description } });
   });
 
   // ===== 更新日程的提醒设置 =====
@@ -196,9 +247,12 @@ module.exports = function (db) {
   router.get('/', (req, res) => {
     const openid = req.query.openid || '';
     // 查询前自动将过期的待办日程标记为已完成（只处理当前用户的）
+    // 统一使用 date() 比较日期部分，避免纯日期格式（如 "2026-01-15"）
+    // 在 SQLite 字符串比较中被误判为 < datetime('now')（短字符串是长字符串前缀）
+    // 规则：start 或 end 日期的日期部分 必须严格早于今天 才自动完成
     try {
       db.prepare(
-        "UPDATE schedules SET status = '已完成', updated_at = datetime('now','localtime') WHERE status = '待办' AND end_time < datetime('now','localtime') AND openid = ?"
+        "UPDATE schedules SET status = '已完成', updated_at = datetime('now','localtime') WHERE status = '待办' AND openid = ? AND ((end_time != '' AND date(substr(end_time,1,10)) < date('now','localtime')) OR (end_time = '' AND date(substr(start_time,1,10)) < date('now','localtime')))"
       ).run(openid);
     } catch (e) {
       // 静默忽略
@@ -210,8 +264,8 @@ module.exports = function (db) {
 
     if (status) { sql += ' AND status = ?'; params.push(status); }
     if (type) { sql += ' AND type = ?'; params.push(type); }
-    if (date_from) { sql += ' AND start_time >= ?'; params.push(date_from); }
-    if (date_to) { sql += ' AND start_time <= ?'; params.push(date_to); }
+    if (date_from) { sql += ' AND datetime(start_time) >= datetime(?)'; params.push(date_from); }
+    if (date_to) { sql += ' AND datetime(start_time) <= datetime(?)'; params.push(date_to); }
 
     sql += ' ORDER BY start_time ASC';
     if (limit) { sql += ' LIMIT ?'; params.push(parseInt(limit)); }

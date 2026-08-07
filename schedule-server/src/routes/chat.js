@@ -1,9 +1,9 @@
 /**
  * Chat 路由 - AI 对话 + 日程提取 + 会话管理
- * 对接豆包 API，处理语音转文字，管理聊天历史（支持多会话）
+ * 对接 DeepSeek API，处理语音转文字，管理聊天历史（支持多会话）
  */
 const express = require('express');
-const doubao = require('../services/doubao');
+const deepseek = require('../services/deepseek');
 const crypto = require('crypto');
 
 function genSessionId() {
@@ -490,12 +490,12 @@ module.exports = function (db) {
         }
       }
 
-      // 1. 调用豆包 API
+      // 1. 调用 DeepSeek API
       let aiResult = null;
       try {
-        aiResult = await doubao.chat(messages);
+        aiResult = await deepseek.chat(messages);
       } catch (err) {
-        console.error('[Chat] 豆包调用失败，降级到规则引擎:', err.message);
+        console.error('[Chat] DeepSeek 调用失败，降级到规则引擎:', err.message);
       }
 
       let replyText = '';
@@ -763,10 +763,10 @@ module.exports = function (db) {
     });
 
     let fullText = '';
-    let doubaoUsage = null;
+    let deepseekUsage = null;
 
     try {
-      const stream = await doubao.chatStream(messages, { maxTokens: 1024 });
+      const stream = await deepseek.chatStream(messages, { maxTokens: 1024 });
 
       // 收集 SSE chunks 并解析文本
       let buffer = '';
@@ -782,12 +782,12 @@ module.exports = function (db) {
           try {
             const json = JSON.parse(dataStr);
             const delta = json.choices?.[0]?.delta;
-            // 豆包直接输出 content，无 reasoning_content
+            // DeepSeek 直接输出 content，无 reasoning_content
             if (delta?.content) {
               fullText += delta.content;
               res.write(`data: ${JSON.stringify({ chunk: delta.content })}\n\n`);
             }
-            if (json.usage) doubaoUsage = json.usage;
+            if (json.usage) deepseekUsage = json.usage;
           } catch (e) { /* 跳过无法解析的行 */ }
         }
       });
@@ -799,28 +799,302 @@ module.exports = function (db) {
           if (dataStr !== '[DONE]') {
             try {
               const json = JSON.parse(dataStr);
-              if (json.usage) doubaoUsage = json.usage;
+              if (json.usage) deepseekUsage = json.usage;
             } catch (e) { /* ignore */ }
           }
         }
-        sendFinalResult(res, fullText, sid, db, openid, doubaoUsage);
+        sendFinalResult(res, fullText, sid, db, openid, deepseekUsage);
       });
 
       stream.on('error', (err) => {
         console.error('[Chat/Stream] 流读取错误:', err.message);
         if (fullText) {
-          sendFinalResult(res, fullText, sid, db, openid, doubaoUsage);
+          sendFinalResult(res, fullText, sid, db, openid, deepseekUsage);
         } else {
           res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
           res.end();
         }
       });
     } catch (err) {
-      console.error('[Chat/Stream] 豆包调用失败:', err.message);
+      console.error('[Chat/Stream] DeepSeek 调用失败:', err.message);
       // 降级：直接返回规则引擎兜底
       const fallbackText = '收到您的消息，但我不太确定如何帮您。可以尝试描述您的日程，例如"明天下午3点开会"。';
       res.write(`data: ${JSON.stringify({ chunk: fallbackText })}\n\n`);
       sendFinalResult(res, fallbackText, sid, db, openid, null);
+    }
+  });
+
+  // ===== AI 结构化解析（用于差异化弹窗表单） =====
+  router.post('/parse', async (req, res) => {
+    const { messages } = req.body;
+
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ success: false, error: '缺少 messages 参数或格式错误' });
+    }
+
+    try {
+      const parseSystemPrompt = deepseek.PARSE_PROMPT.replace(
+        '{{CURRENT_DATE}}',
+        new Date().toISOString().slice(0, 10)
+      );
+
+      // 使用 PARSE_PROMPT 调用 DeepSeek，获取结构化JSON
+      const response = await deepseek.chat(messages, {
+        maxTokens: 512,
+        temperature: 0.3,
+        systemPrompt: parseSystemPrompt
+      });
+
+      // deepseek.chat() 内部会尝试用旧格式解析，新格式字段匹配不上时 text 字段是原始 AI 响应
+      let text = '';
+      if (typeof response === 'string') {
+        text = response;
+      } else if (response?.text) {
+        text = response.text; // deepseek.chat() 返回的 text 字段
+      } else if (response?.choices?.[0]?.message?.content) {
+        text = response.choices[0].message.content;
+      } else {
+        text = JSON.stringify(response);
+      }
+
+      // 尝试从文本中提取 JSON
+      let parsed;
+      try {
+        // 先尝试直接解析
+        parsed = JSON.parse(text.trim());
+      } catch (e1) {
+        // 尝试从```json ... ```中提取
+        const codeMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+        if (codeMatch) {
+          try {
+            parsed = JSON.parse(codeMatch[1].trim());
+          } catch (e2) {
+            const braceMatch = text.match(/\{[\s\S]*\}/);
+            if (braceMatch) {
+              try {
+                parsed = JSON.parse(braceMatch[0].trim());
+              } catch (e3) {
+                console.error('[Parse] JSON解析失败，原始文本:', text.slice(0, 200));
+                return res.json({ success: false, error: 'AI返回格式异常，请重试', raw: text.slice(0, 300) });
+              }
+            }
+          }
+        } else {
+          const braceMatch = text.match(/\{[\s\S]*\}/);
+          if (braceMatch) {
+            try {
+              parsed = JSON.parse(braceMatch[0].trim());
+            } catch (e3) {
+              console.error('[Parse] JSON解析失败，原始文本:', text.slice(0, 200));
+              return res.json({ success: false, error: 'AI返回格式异常，请重试', raw: text.slice(0, 300) });
+            }
+          } else {
+            console.error('[Parse] 未找到JSON，原始文本:', text.slice(0, 200));
+            return res.json({ success: false, error: 'AI未返回有效JSON', raw: text.slice(0, 300) });
+          }
+        }
+      }
+
+      // 标准化字段
+      const result = {
+        target_module: parsed.target_module || 'task',
+        title: (parsed.title || '').slice(0, 50),
+        content: parsed.content || '',
+        start_time: parsed.start_time === 'null' ? null : (parsed.start_time || null),
+        end_time: parsed.end_time === 'null' ? null : (parsed.end_time || null),
+        deadline: parsed.deadline === 'null' ? null : (parsed.deadline || null),
+        amount: parsed.amount ? Number(parsed.amount) : null,
+      };
+
+      console.log('[Parse] 解析成功:', JSON.stringify(result));
+      res.json({ success: true, data: result });
+    } catch (err) {
+      console.error('[Parse] 解析失败:', err.message);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ===== 快速草稿：从自然语言创建一个草稿（供首页快捷输入） =====
+  router.post('/draft', async (req, res) => {
+    const { text, source_type, openid = 'default' } = req.body;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({ success: false, error: '缺少 text 参数' });
+    }
+
+    try {
+      const parseSystemPrompt = deepseek.PARSE_PROMPT.replace(
+        '{{CURRENT_DATE}}',
+        new Date().toISOString().slice(0, 10)
+      );
+
+      const messages = [{ role: 'user', content: text }];
+      const response = await deepseek.chat(messages, {
+        maxTokens: 512,
+        temperature: 0.3,
+        systemPrompt: parseSystemPrompt
+      });
+
+      let responseText = '';
+      if (typeof response === 'string') {
+        responseText = response;
+      } else if (response?.text) {
+        responseText = response.text;
+      } else if (response?.choices?.[0]?.message?.content) {
+        responseText = response.choices[0].message.content;
+      } else {
+        responseText = JSON.stringify(response);
+      }
+
+      // 尝试从文本中提取 JSON
+      let parsed;
+      try {
+        parsed = JSON.parse(responseText.trim());
+      } catch (e1) {
+        const codeMatch = responseText.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+        if (codeMatch) {
+          try {
+            parsed = JSON.parse(codeMatch[1].trim());
+          } catch (e2) {
+            const braceMatch = responseText.match(/\{[\s\S]*\}/);
+            if (braceMatch) {
+              try {
+                parsed = JSON.parse(braceMatch[0].trim());
+              } catch (e3) {
+                return res.json({ success: false, error: 'AI返回格式异常，请重试' });
+              }
+            }
+          }
+        } else {
+          const braceMatch = responseText.match(/\{[\s\S]*\}/);
+          if (braceMatch) {
+            try {
+              parsed = JSON.parse(braceMatch[0].trim());
+            } catch (e3) {
+              return res.json({ success: false, error: 'AI返回格式异常，请重试' });
+            }
+          }
+        }
+      }
+
+      if (!parsed) {
+        return res.json({ success: false, error: 'AI返回格式异常，请重试' });
+      }
+
+      // 规范化时间格式（AI 可能返回 "2026-08-05 15:00" 而非 ISO 8601）
+      const normTime = (t) => {
+        if (!t || t === 'null') return null;
+        let ts = String(t).trim().replace(' ', 'T');
+        if (ts.length === 10) ts += 'T00:00:00';
+        if (!ts.includes('Z') && !ts.includes('+') && ts.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)) ts += ':00.000Z';
+        return ts;
+      };
+
+      const targetModule = parsed.target_module || 'schedule';
+
+      // 必填项兜底提示：若AI未返回ai_hint，后端根据规则补充
+      let aiHint = parsed.ai_hint || null;
+      if (!aiHint) {
+        if (targetModule === 'schedule' && !normTime(parsed.start_time)) {
+          aiHint = '日程缺少开始时间，请补充';
+        } else if (targetModule === 'task' && !normTime(parsed.deadline)) {
+          aiHint = '任务缺少截止时间，请补充';
+        } else if (targetModule === 'apply' && !normTime(parsed.start_time)) {
+          aiHint = '申请缺少开始时间，请补充';
+        } else if (targetModule === 'expense' && !(parsed.amount || parsed.amount === 0)) {
+          aiHint = '报销缺少金额，请补充';
+        } else if (!parsed.title?.trim()) {
+          aiHint = '请输入标题';
+        }
+      }
+
+      const draft = {
+        id: Date.now(),
+        openid,
+        raw_content: text,
+        source_type: source_type || 'text',
+        parsed_title: (parsed.title || '').slice(0, 50),
+        parsed_content: parsed.content || '',
+        start_time: normTime(parsed.start_time),
+        end_time: normTime(parsed.end_time),
+        deadline: normTime(parsed.deadline),
+        target_module: targetModule,
+        amount: parsed.amount ? Number(parsed.amount) : null,
+        type: parsed.type || 'event',
+        priority: parsed.priority || 'medium',
+        location: parsed.location || '',
+        person: parsed.person || '',
+        ai_hint: aiHint,
+        status: 'draft',
+        created_at: new Date().toISOString(),
+      };
+
+      console.log('[Draft] 创建成功:', draft.parsed_title, '→', draft.target_module);
+      res.json({ success: true, data: draft });
+    } catch (err) {
+      console.error('[Draft] 创建失败:', err.message);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ===== 统一创建接口（根据module路由到对应表） =====
+  router.post('/create', async (req, res) => {
+    const { openid, module: moduleType, title, content, start_time, end_time, deadline, amount } = req.body;
+
+    if (!openid || !moduleType || !title) {
+      return res.status(400).json({ success: false, error: '缺少 openid、module 或 title' });
+    }
+
+    try {
+      let result;
+
+      switch (moduleType) {
+        case 'schedule': {
+          if (!start_time) {
+            return res.status(400).json({ success: false, error: '日程必须提供开始时间' });
+          }
+          const stmt = db.prepare(
+            'INSERT INTO schedules (openid, title, description, start_time, end_time, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+          );
+          result = stmt.run(openid, title, content || '', start_time, end_time || start_time, 'pending', new Date().toISOString());
+          break;
+        }
+        case 'task': {
+          const stmt = db.prepare(
+            'INSERT INTO tasks (openid, title, description, priority, due_date, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+          );
+          result = stmt.run(openid, title, content || '', 'medium', deadline || null, 'pending', new Date().toISOString());
+          break;
+        }
+        case 'inspiration': {
+          const stmt = db.prepare(
+            'INSERT INTO inspirations (openid, title, description, created_at) VALUES (?, ?, ?, ?)'
+          );
+          result = stmt.run(openid, title, content || '', new Date().toISOString());
+          break;
+        }
+        case 'apply': {
+          const stmt = db.prepare(
+            'INSERT INTO applications (openid, title, description, expected_time, status, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+          );
+          result = stmt.run(openid, title, content || '', deadline || null, 'pending', new Date().toISOString());
+          break;
+        }
+        case 'expense': {
+          const stmt = db.prepare(
+            'INSERT INTO expenses (openid, title, description, amount, expense_date, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+          );
+          result = stmt.run(openid, title, content || '', amount || 0, deadline || null, 'pending', new Date().toISOString());
+          break;
+        }
+        default:
+          return res.status(400).json({ success: false, error: `未知模块类型: ${moduleType}` });
+      }
+
+      res.json({ success: true, data: { id: result.lastInsertRowid, module: moduleType } });
+    } catch (err) {
+      console.error('[Create] 创建失败:', err.message);
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 

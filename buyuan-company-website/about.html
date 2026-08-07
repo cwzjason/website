@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>关于我们 - 埠勤商贸</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💎</text></svg>">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      line-height: 1.6;
+    }
+    .navbar {
+      position: fixed; top: 0; left: 0; right: 0; height: 60px;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid #e5e5e7;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 40px; z-index: 1000;
+    }
+    .navbar-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .plane-icon { width: 36px; height: 36px; flex-shrink: 0; }
+    .logo-text { font-size: 18px; font-weight: 600; color: #1e3a8a; letter-spacing: 0.3px; }
+    .nav-links { display: flex; list-style: none; gap: 32px; align-items: center; }
+    .nav-links a { text-decoration: none; color: #333; font-size: 14px; font-weight: 400; transition: color 0.2s; }
+    .nav-links a:hover { color: #1e3a8a; }
+    .nav-links a.active { color: #1e3a8a; font-weight: 500; }
+
+    .page-content { padding-top: 100px; padding-bottom: 60px; }
+    .container { max-width: 1000px; margin: 0 auto; padding: 0 40px; }
+    .page-hero { text-align: center; margin-bottom: 60px; }
+    .page-hero h1 { font-size: 42px; font-weight: 700; color: #1d1d1f; margin-bottom: 12px; }
+    .page-hero p { font-size: 20px; color: #86868b; }
+
+    .about-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; }
+    .about-text h2 { font-size: 28px; font-weight: 600; margin-bottom: 20px; color: #1d1d1f; }
+    .about-text p { font-size: 15px; color: #555; margin-bottom: 16px; line-height: 1.8; }
+    .about-image { display: flex; align-items: center; justify-content: center; }
+    .image-placeholder {
+      width: 100%; max-width: 360px; aspect-ratio: 1;
+      background: #ffffff; border-radius: 20px; border: 1px solid #e5e5e7;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      color: #86868b; font-size: 48px;
+    }
+    .image-placeholder p { font-size: 14px; margin-top: 12px; }
+
+    .mission { background: #ffffff; border-top: 1px solid #e5e5e7; padding: 60px 0; margin-top: 60px; }
+    .mission-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .mission-card {
+      background: #f5f5f7; border-radius: 16px; padding: 32px 28px;
+      text-align: center; transition: transform 0.2s;
+    }
+    .mission-card:hover { transform: translateY(-4px); }
+    .mission-card h3 { font-size: 18px; font-weight: 600; color: #1d1d1f; margin-bottom: 12px; }
+    .mission-card p { font-size: 14px; color: #666; line-height: 1.7; }
+
+    .footer { padding: 30px 40px; text-align: center; border-top: 1px solid #e5e5e7; background: #ffffff; }
+    .footer p { font-size: 13px; color: #86868b; }
+
+    @media (max-width: 768px) {
+      .navbar { padding: 0 20px; }
+      .nav-links { gap: 16px; }
+      .nav-links a { font-size: 13px; }
+      .container { padding: 0 20px; }
+      .about-grid { grid-template-columns: 1fr; gap: 32px; }
+      .mission-grid { grid-template-columns: 1fr; }
+      .page-hero h1 { font-size: 32px; }
+      .page-hero p { font-size: 17px; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar">
+    <a href="index.html" class="navbar-logo">
+      <svg class="plane-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M24 4L8 36L20 30L24 44L28 30L40 36L24 4Z" fill="#1e3a8a"/>
+        <path d="M24 4L8 36L20 30L24 26L28 30L40 36L24 4Z" fill="#3b82f6"/>
+        <circle cx="24" cy="28" r="3" fill="#ffffff"/>
+        <rect x="22" y="14" width="4" height="14" rx="2" fill="#1e3a8a"/>
+      </svg>
+      <span class="logo-text">埠勤商贸</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="index.html">首页</a></li>
+      <li><a href="about.html" class="active">关于我们</a></li>
+      <li><a href="products.html">产品服务</a></li>
+      <li><a href="mall/index.html" target="_blank">埠勤商城</a></li><li><a href="schedule.html">日程管理</a></li>
+      <li><a href="https://qcncdkprniip.feishu.cn/app/JH6eb0yXDaPbRwsW8fpcA6p3n0z?pageId=pgeakzNKwKtIs7TK" target="_blank">经营仪表盘</a></li>
+      <li><a href="contact.html">联系我们</a></li>
+    </ul>
+  </nav>
+
+  <div class="page-content">
+    <section class="page-hero">
+      <div class="container">
+        <h1>关于我们</h1>
+        <p>了解埠勤商贸的故事与愿景</p>
+      </div>
+    </section>
+
+    <section class="about-intro">
+      <div class="container">
+        <div class="about-grid">
+          <div class="about-text">
+            <h2>公司简介</h2>
+            <p>埠勤商贸是一家专业的综合性商贸企业，成立于2011年。我们深耕商业贸易领域，专注于为企业客户提供高品质物资供应、设备采购及商务服务解决方案，在行业中积累了丰富的资源与良好的口碑。</p>
+            <p>经过十余年的稳健发展，我们已与超过500家企业客户建立了长期稳定的合作关系，服务网络覆盖全国主要经济区域，形成了完善的供应链管理与客户服务体系。</p>
+            <p>我们的团队汇聚了一批具有多年行业经验的采购专家、供应链管理人才和商务服务精英，始终秉持"诚信务实、合作共赢"的经营理念，为每一位客户提供量身定制的商贸服务。</p>
+          </div>
+          <div class="about-image">
+            <div class="image-placeholder">
+              <span>🏢</span>
+              <p>公司大楼</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mission">
+      <div class="container">
+        <div class="mission-grid">
+          <div class="mission-card">
+            <h3>🎯 我们的使命</h3>
+            <p>连接优质资源，为客户创造卓越的商业价值，成为企业最值得信赖的商贸合作伙伴</p>
+          </div>
+          <div class="mission-card">
+            <h3>🔭 我们的愿景</h3>
+            <p>成为行业领先的综合商贸服务平台，构建高效、透明、共赢的商业生态圈</p>
+          </div>
+          <div class="mission-card">
+            <h3>💎 核心价值观</h3>
+            <p>客户至上、品质为本、诚信务实、高效创新、合作共赢</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="footer">
+    <p>&copy; 2026 湖北埠勤商贸有限公司 版权所有</p>
+  </footer>
+
+  <script src="assets/js/main.js"></script>
+</body>
+</html>

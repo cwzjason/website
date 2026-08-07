@@ -79,14 +79,50 @@ function gracefulShutdown(signal) {
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
+const { verifyToken } = require('./routes/auth');
+const authGuard = require('./middleware/auth');
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// ===== JWT 鉴权中间件：从 Token 中提取用户信息 → 注入 req.openid =====
+app.use('/api', (req, _res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    try {
+      const payload = verifyToken(token);
+      if (payload) {
+        req.openid = payload.id;
+        req.userRole = payload.role;
+        req.userName = payload.name;
+      }
+    } catch (e) {
+      // token 无效，忽略
+    }
+  }
+  // 兜底：如果 Token 里没有，从 query/body 里取（兼容旧版）
+  if (!req.openid) {
+    req.openid = req.query.openid || (req.body && req.body.openid) || '';
+  }
+  next();
+});
+
 // ===== 异步启动 =====
 async function start() {
   const db = await getDb;
+
+  // 【新增】账号密码认证路由（注意：不经过 JWT 中间件的强制鉴权）
+  const { routes: authRoutes } = require('./routes/auth');
+  app.use('/api/auth', authRoutes(db));
+  // ===== 准入拦截 =====
+  const authMiddleware = authGuard(db);
+  app.use('/api', (req, res, next) => {
+    if (req.path.startsWith('/auth')) return next();
+    return authMiddleware(req, res, next);
+  });
 
   const scheduleRoutes = require('./routes/schedules')(db);
   const chatRoutes = require('./routes/chat')(db);
@@ -117,6 +153,14 @@ async function start() {
   app.use('/api/inspirations', inspirationRoutes);
   app.use('/api/applications', applicationRoutes);
   app.use('/api/expenses', expenseRoutes);
+
+  // 【新增】审批流程接口
+  const approvalRoutes = require('./routes/approval')(db);
+  app.use('/api/approval', approvalRoutes);
+
+  // 【新增】用户管理接口
+  const userRoutes = require('./routes/user')(db);
+  app.use('/api/user', userRoutes);
 
   // ===== 提醒服务 =====
   const reminder = new ReminderService(db);
@@ -195,16 +239,17 @@ async function start() {
 
   // ===== 微信登录：用 code 换 openid + unionid =====
   app.post('/api/auth/login', async (req, res) => {
-    const { code } = req.body;
+    const { code, device_id } = req.body;
     if (!code) return res.status(400).json({ success: false, error: '缺少 code' });
 
     const appid = process.env.WECHAT_APPID;
     const secret = process.env.WECHAT_SECRET;
 
-    // 未配置 AppID/Secret 时使用 code 作为 openid（开发调试用）
+    // 未配置 AppID/Secret 时使用客户端持久化 UUID 作为 openid（保证跨 session 不变）
     if (!appid || !secret) {
-      console.warn('[Auth] 未配置 WECHAT_APPID/WECHAT_SECRET，使用降级模式（code 作为 openid）');
-      return res.json({ success: true, data: { openid: 'dev_' + code, session_key: 'dev_session' } });
+      const fallbackOpenid = device_id || ('dev_' + code);
+      console.warn('[Auth] 未配置 WECHAT_APPID/WECHAT_SECRET，使用降级模式，openid:', fallbackOpenid.substring(0, 20) + '...');
+      return res.json({ success: true, data: { openid: fallbackOpenid, session_key: 'dev_session' } });
     }
 
     const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${appid}&secret=${secret}&js_code=${code}&grant_type=authorization_code`;
@@ -437,7 +482,7 @@ async function start() {
   });
 
   // ===== 静态资源（网页端） =====
-  app.use(express.static(path.join(__dirname, '..', 'public')));
+  // app.use(express.static(path.join(__dirname, '..', 'public')));
 
   // ===== Express 全局错误处理中间件 =====
   app.use((err, _req, res, _next) => {

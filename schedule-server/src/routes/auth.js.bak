@@ -1,0 +1,88 @@
+const crypto = require('crypto');
+const JWT_SECRET = crypto.randomBytes(32).toString('hex');
+function createToken(p) {
+  const h=Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url');
+  const b=Buffer.from(JSON.stringify({...p,iat:Math.floor(Date.now()/1000)})).toString('base64url');
+  const s=crypto.createHmac('sha256',JWT_SECRET).update(h+'.'+b).digest('base64url');
+  return h+'.'+b+'.'+s;
+}
+function verifyToken(t) {
+  const p=t.split('.');if(p.length!==3) return null;
+  const s=crypto.createHmac('sha256',JWT_SECRET).update(p[0]+'.'+p[1]).digest('base64url');
+  if(s!==p[2]) return null;
+  return JSON.parse(Buffer.from(p[1],'base64url').toString());
+}
+module.exports={verifyToken,routes};
+function routes(db) {
+  const r=require('express').Router();
+  r.post('/login',(req,res)=>{
+    try{
+      var o=(req.body.device_id||'').trim();
+      if(!o){o='u_'+Date.now().toString(36)+'_'+Math.random().toString(36).substring(2,8)}
+      var e=db.prepare('SELECT id,name,status,is_boss FROM users WHERE id=?').get(o);
+      if(e){
+        res.json({success:true,data:{openid:o,exists:true,status:e.status,name:e.name,is_boss:!!e.is_boss}});
+      }else{
+        res.json({success:true,data:{openid:o,exists:false}});
+      }
+    }catch(ex){res.status(500).json({success:false,error:ex.message})}
+  });
+  r.get('/status',(req,res)=>{
+    try{
+      const openid=req.query.openid;if(!openid) return res.status(400).json({success:false,error:'Missing openid'});
+      const u=db.prepare('SELECT id,name,status,is_boss,role FROM users WHERE id=?').get(openid);
+      if(!u) return res.json({success:true,data:{exists:false}});
+      res.json({success:true,data:{exists:true,status:u.status,is_boss:!!u.is_boss,name:u.name,role:u.role}});
+    }catch(e){res.status(500).json({success:false,error:e.message})}
+  });
+  r.post('/apply',(req,res)=>{
+    try{
+      const{openid,name}=req.body;
+      if(!openid) return res.status(400).json({success:false,error:'Missing openid'});
+      if(!name||!name.trim()) return res.status(400).json({success:false,error:'Please enter name'});
+      const n=name.trim();
+      const e=db.prepare('SELECT id,status FROM users WHERE id=?').get(openid);
+      if(e){if(e.status==='approved') return res.json({success:false,error:'Already approved'});
+        db.prepare("UPDATE users SET name=?,status='pending',updated_at=datetime('now','localtime') WHERE id=?").run(n,openid);
+      }else{
+
+        db.prepare("INSERT INTO users(id,name,role,status,is_boss,created_at,updated_at) VALUES(?,?,?,?,?,datetime('now','localtime'),datetime('now','localtime'))").run(openid,n,newRole,newStatus,newIsBoss);
+      }
+      res.json({success:true,data:{status:newStatus,is_boss:isFirst,role:newRole,message:isFirst?'已自动设为管理员':'申请已提交，等待审批'}});
+    }catch(e){res.status(500).json({success:false,error:e.message})}
+  });
+  r.get('/pending-users',(req,res)=>{
+    try{
+      const openid=req.query.openid;if(!openid) return res.status(400).json({success:false,error:'Missing openid'});
+      const b=db.prepare('SELECT is_boss FROM users WHERE id=? AND status=?').get(openid,'approved');
+      if(!b||!b.is_boss) return res.status(403).json({success:false,error:'Forbidden'});
+      const pe=db.prepare("SELECT id,name,status,created_at FROM users WHERE status IN ('pending','rejected') ORDER BY created_at DESC").all();
+      const ap=db.prepare("SELECT id,name,status,is_boss,created_at FROM users WHERE status='approved' ORDER BY created_at DESC").all();
+      res.json({success:true,data:{pending:pe,approved:ap,total:pe.length+ap.length}});
+    }catch(e){res.status(500).json({success:false,error:e.message})}
+  });
+  r.post('/approve-user',(req,res)=>{
+    try{
+      const{openid,target_openid,action}=req.body;
+      if(!openid||!target_openid||!['approve','reject'].includes(action)) return res.status(400).json({success:false,error:'Invalid'});
+      const b=db.prepare('SELECT is_boss FROM users WHERE id=? AND status=?').get(openid,'approved');
+      if(!b||!b.is_boss) return res.status(403).json({success:false,error:'Forbidden'});
+      const tg=db.prepare('SELECT id,name FROM users WHERE id=?').get(target_openid);
+      if(!tg) return res.status(404).json({success:false,error:'Not found'});
+      const ns=action==='approve'?'approved':'rejected';
+      db.prepare("UPDATE users SET status=?,updated_at=datetime('now','localtime') WHERE id=?").run(ns,target_openid);
+      res.json({success:true,data:{status:ns}});
+    }catch(e){res.status(500).json({success:false,error:e.message})}
+  });
+  r.post('/set-boss',(req,res)=>{
+    try{
+      const{openid,target_openid,is_boss}=req.body;
+      if(!openid||!target_openid) return res.status(400).json({success:false,error:'Missing params'});
+      const b=db.prepare('SELECT is_boss FROM users WHERE id=? AND status=?').get(openid,'approved');
+      if(!b||!b.is_boss) return res.status(403).json({success:false,error:'Forbidden'});
+      db.prepare("UPDATE users SET is_boss=?,updated_at=datetime('now','localtime') WHERE id=?").run(is_boss?1:0,target_openid);
+      res.json({success:true,message:is_boss?'Set as boss':'Removed boss'});
+    }catch(e){res.status(500).json({success:false,error:e.message})}
+  });
+  return r;
+}

@@ -1,0 +1,121 @@
+/**
+ * 日程管理 - 后端入口
+ * 
+ * 架构：
+ *   routes/schedules.js     → 日程 CRUD + AI 解析 + 语音/图片上传
+ *   services/ai-parser.js   → 自然语言解析引擎（规则引擎）
+ *   services/reminder.js    → 定时提醒扫描 + 推送
+ *   services/asr-ocr.js     → 腾讯云 ASR/OCR（语音转文字 / 图片识字）
+ *   services/wechat-push.js → 微信小程序订阅消息推送
+ *   db/database.js          → SQLite 数据库（统一 schema）
+ */
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const https = require('https');
+const db = require('./db/database');
+const scheduleRoutes = require('./routes/schedules')(db);
+const chatRoutes = require('./routes/chat')(db);
+const uploadRoutes = require('./routes/upload')();
+const ReminderService = require('./services/reminder');
+const { sendReminder } = require('./services/wechat-push');
+
+const app = express();
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// ===== 路由挂载 =====
+app.use('/api/schedules', scheduleRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/upload', uploadRoutes);
+
+// ===== 提醒服务 =====
+const reminder = new ReminderService(db);
+reminder.start();
+
+// 客户端轮询待提醒日程
+app.get('/api/reminders/pending', (_req, res) => {
+  const pending = reminder.getPending(20);
+  res.json({ success: true, data: pending, total: pending.length });
+});
+
+// 客户端确认提醒已送达
+app.post('/api/reminders/ack/:reminderId', (req, res) => {
+  const { reminderId } = req.params;
+  reminder.markSent(parseInt(reminderId));
+  res.json({ success: true, message: '已确认' });
+});
+
+// ===== 微信登录：用 code 换 openid =====
+app.post('/api/auth/login', async (req, res) => {
+  const { code } = req.body;
+  if (!code) return res.status(400).json({ success: false, error: '缺少 code' });
+
+  const appid = process.env.WECHAT_APPID;
+  const secret = process.env.WECHAT_SECRET;
+  if (!appid || !secret) {
+    return res.status(500).json({ success: false, error: '服务端未配置小程序 AppID/Secret' });
+  }
+
+  const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${appid}&secret=${secret}&js_code=${code}&grant_type=authorization_code`;
+
+  try {
+    const data = await new Promise((resolve, reject) => {
+      https.get(url, (r) => {
+        let d = '';
+        r.on('data', c => d += c);
+        r.on('end', () => { try { resolve(JSON.parse(d)); } catch { resolve(d); } });
+      }).on('error', reject);
+    });
+
+    if (data.openid) {
+      res.json({ success: true, data: { openid: data.openid, session_key: data.session_key } });
+    } else {
+      res.status(400).json({ success: false, error: data.errmsg || '微信登录失败' });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ===== 保存订阅消息授权 =====
+app.post('/api/subscribe', (req, res) => {
+  const { openid, templateId, formId } = req.body;
+  if (!openid || !templateId) {
+    return res.status(400).json({ success: false, error: '缺少 openid 或 templateId' });
+  }
+
+  const stmt = db.prepare(`
+    INSERT INTO user_subscriptions (openid, template_id, form_id)
+    VALUES (?, ?, ?)
+  `);
+  stmt.run(openid, templateId, formId || null);
+
+  res.json({ success: true, message: '订阅授权已保存' });
+});
+
+// ===== 健康检查 =====
+app.get('/api/health', (_req, res) => {
+  const count = db.prepare('SELECT COUNT(*) as total FROM schedules').get();
+  const pendingReminders = db.prepare('SELECT COUNT(*) as total FROM schedule_reminders WHERE channel = ?').get('pending');
+  res.json({
+    success: true,
+    status: 'running',
+    schedules_total: count.total,
+    pending_reminders: pendingReminders.total,
+  });
+});
+
+// ===== 静态资源（网页端） =====
+app.use(express.static(path.join(__dirname, '..', 'public')));
+
+const PORT = process.env.PORT || 3002;
+app.listen(PORT, () => {
+  console.log(`[日程管理] API 已启动 → http://0.0.0.0:${PORT}`);
+  console.log(`[日程管理] 网页端    → http://0.0.0.0:${PORT}/`);
+  console.log(`[日程管理] 健康检查 → http://0.0.0.0:${PORT}/api/health`);
+});

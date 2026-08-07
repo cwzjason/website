@@ -1,0 +1,241 @@
+[DB] SQLite 数据库已就绪: /www/wwwroot/buyuan-company-website/buqin_mall_package/buqin.db
+[DB] 商品表字段迁移完成
+[DB] 商品图片表 & 导入日志表 & 批量图片导入表已就绪
+========================================
+  埠勤商贸 API 服务器 v2.0
+  http://localhost:3001
+  MariaDB 数据源
+  - GET/POST/PUT/DELETE /api/tables/:name
+  - GET/POST/PUT/DELETE /api/products
+  - POST /api/products/import-jd (京东链接导入)
+  - POST /api/products/preview-jd (京东链接预览)
+  - GET  /api/products/:id/images (商品图片查询)
+  - POST /api/products/:id/images/upload (手动上传图片)
+  - POST /api/products/:id/images/download (下载京东图片)
+  - POST /api/products/:id/images/reorder (拖拽排序)
+  - PUT/DELETE /api/products/images/:imageId (图片操作)
+  - GET  /api/proxy-image?url=... (图片代理，解决防盗链)
+  - POST /api/images/batch-download (批量下载图片到本地)
+  - POST /api/images/batch-import-by-barcode (按编号批量导入图片)
+  - POST /api/products/import-excel-v2 (Excel导入含内嵌图片)
+  - POST /api/hunyuan/chat
+  - POST /api/hunyuan/ocr
+========================================
+GET /api/categories/customer 200 7ms
+GET /api/products 200 1ms
+GET /api/categories/customer 200 2ms
+GET /api/products 200 1ms
+GET /api/products 200 1ms
+GET /api/categories/customer 200 2ms
+GET /api/categories/customer 200 2ms
+GET /api/categories/customer 200 2ms
+GET /api/products 200 1ms
+GET /api/categories/customer 200 2ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 200 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 304 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active&cr_l1=%E7%B2%AE%E6%B2%B9%E9%A3%9F%E5%93%81 200 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active&cr_l1=%E7%94%9F%E9%B2%9C%E5%86%B7%E5%86%BB 200 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active&cr_l1=%E7%94%9F%E9%B2%9C%E5%86%B7%E5%86%BB 304 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active&cr_l1=%E7%B2%AE%E6%B2%B9%E9%A3%9F%E5%93%81 304 0ms
+GET /api/products/categories 200 2ms
+GET /api/batch-image-import/sessions 200 1ms
+[Step1 Import] 解析到 0 张内嵌图片
+POST /api/products/import-step1 200 54ms
+POST /api/products/import-step2 200 13ms
+[BatchImg] 任务 #1 创建: 5 个SKU, 已匹配 5 个商品
+POST /api/batch-image-import/sessions 200 34ms
+GET /api/batch-image-import/sessions 200 0ms
+GET /api/batch-image-import/sessions/1 200 1ms
+[BatchImg] 任务 #1 上传: 45 匹配, 0 不匹配, 0 跳过
+POST /api/batch-image-import/sessions/1/upload 200 53ms
+GET /api/batch-image-import/sessions 200 1ms
+GET /api/batch-image-import/sessions/1 200 3ms
+GET /api/batch-image-import/sessions/1 304 2ms
+GET /api/batch-image-import/sessions/1 304 1ms
+[BatchImg] 任务 #1 结束: 绑定了 45 张图片, 0 跳过, 0 错误
+POST /api/batch-image-import/sessions/1/finalize 200 93ms
+GET /api/batch-image-import/sessions 200 1ms
+GET /api/products?page=1&pageSize=15 200 1ms
+GET /api/products/categories 304 1ms
+GET /api/batch-image-import/sessions 304 0ms
+GET /api/products?page=1&pageSize=15 304 2ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 304 1ms
+GET /api/categories/customer 304 2ms
+GET /api/categories/customer 304 2ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 304 0ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 304 1ms
+GET /api/categories/customer 304 2ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 304 1ms
+GET /api/categories/customer 304 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 304 1ms
+GET /api/categories/customer 304 2ms
+GET /api/categories/customer 304 2ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 304 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 304 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active&cr_l1=%E5%B7%A5%E4%B8%9A%E5%93%81 200 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active&cr_l1=%E5%B7%A5%E4%B8%9A%E5%93%81 304 1ms
+GET /api/products/categories 304 2ms
+GET /api/products?page=1&pageSize=15 304 2ms
+GET /api/batch-image-import/sessions 304 1ms
+GET /api/products/5 200 1ms
+PUT /api/products/5 200 1ms
+GET /api/products?page=1&pageSize=15 200 3ms
+PUT /api/products/5 200 1ms
+GET /api/products?page=1&pageSize=15 200 2ms
+GET /api/products/4 200 1ms
+PUT /api/products/4 200 1ms
+GET /api/products?page=1&pageSize=15 200 2ms
+PUT /api/products/4 200 1ms
+GET /api/products?page=1&pageSize=15 200 1ms
+GET /api/products/3 200 1ms
+PUT /api/products/3 200 1ms
+GET /api/products?page=1&pageSize=15 200 1ms
+PUT /api/products/3 200 0ms
+GET /api/products?page=1&pageSize=15 200 2ms
+GET /api/products/2 200 1ms
+PUT /api/products/2 200 1ms
+GET /api/products?page=1&pageSize=15 200 2ms
+PUT /api/products/2 200 1ms
+GET /api/products?page=1&pageSize=15 200 2ms
+GET /api/products/1 200 1ms
+PUT /api/products/1 200 1ms
+GET /api/products?page=1&pageSize=15 200 1ms
+PUT /api/products/1 200 1ms
+GET /api/products?page=1&pageSize=15 200 3ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 200 2ms
+GET /api/categories/customer 200 1ms
+GET /api/products/5 200 1ms
+GET /api/products/categories 304 1ms
+GET /api/batch-image-import/sessions 304 1ms
+[Step1 Import] 解析到 0 张内嵌图片
+POST /api/products/import-step1 200 13ms
+POST /api/products/import-step2 200 10ms
+[BatchImg] 任务 #2 创建: 5 个SKU, 已匹配 5 个商品
+POST /api/batch-image-import/sessions 200 7ms
+GET /api/batch-image-import/sessions 200 1ms
+GET /api/batch-image-import/sessions/2 200 0ms
+[BatchImg] 任务 #2 上传: 45 匹配, 0 不匹配, 0 跳过
+POST /api/batch-image-import/sessions/2/upload 200 65ms
+GET /api/batch-image-import/sessions 200 1ms
+GET /api/batch-image-import/sessions/2 200 1ms
+GET /api/batch-image-import/sessions/2 304 2ms
+GET /api/batch-image-import/sessions/2 304 1ms
+[BatchImg] 任务 #2 结束: 绑定了 45 张图片, 0 跳过, 0 错误
+POST /api/batch-image-import/sessions/2/finalize 200 111ms
+GET /api/batch-image-import/sessions 200 0ms
+GET /api/products?page=1&pageSize=15 200 2ms
+GET /api/products/10 200 2ms
+PUT /api/products/10 200 0ms
+GET /api/products?page=1&pageSize=15 200 2ms
+PUT /api/products/10 200 1ms
+GET /api/products?page=1&pageSize=15 200 3ms
+GET /api/products/9 200 1ms
+PUT /api/products/9 200 1ms
+GET /api/products?page=1&pageSize=15 200 2ms
+PUT /api/products/9 200 0ms
+GET /api/products?page=1&pageSize=15 200 2ms
+GET /api/products/8 200 2ms
+PUT /api/products/8 200 0ms
+GET /api/products?page=1&pageSize=15 200 1ms
+PUT /api/products/8 200 0ms
+GET /api/products?page=1&pageSize=15 200 1ms
+GET /api/products/7 200 1ms
+PUT /api/products/7 200 1ms
+GET /api/products?page=1&pageSize=15 200 2ms
+PUT /api/products/7 200 3ms
+GET /api/products?page=1&pageSize=15 200 4ms
+GET /api/products/6 200 1ms
+PUT /api/products/6 200 1ms
+GET /api/products?page=1&pageSize=15 200 2ms
+PUT /api/products/6 200 0ms
+GET /api/products?page=1&pageSize=15 200 2ms
+GET /api/products/categories 304 1ms
+GET /api/batch-image-import/sessions 304 1ms
+GET /api/products?page=1&pageSize=15 304 2ms
+GET /api/categories/customer 200 2ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 200 2ms
+GET /api/categories/customer 304 2ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 304 2ms
+GET /api/categories/customer 200 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 200 1ms
+GET /api/products/10 200 1ms
+GET /api/products/10 200 1ms
+GET /api/products/8 200 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=asc&status=active 200 3ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active 200 2ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E7%94%9F%E9%B2%9C%E5%86%B7%E5%86%BB 200 1ms
+GET /api/products/categories 304 1ms
+GET /api/products?page=1&pageSize=15 200 2ms
+GET /api/batch-image-import/sessions 304 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E7%94%9F%E9%B2%9C%E5%86%B7%E5%86%BB&cr_l2=%E4%B9%B3%E5%93%81%E5%86%B7%E9%A5%AE 200 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E7%94%9F%E9%B2%9C%E5%86%B7%E5%86%BB&cr_l2=%E5%86%B7%E8%97%8F%2F%E5%86%B7%E5%86%BB%E9%A3%9F%E5%93%81 200 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E7%94%9F%E9%B2%9C%E5%86%B7%E5%86%BB&cr_l2=%E6%B5%B7%E9%B2%9C%E6%B0%B4%E4%BA%A7 200 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E7%94%9F%E9%B2%9C%E5%86%B7%E5%86%BB&cr_l2=%E7%8C%AA%E7%89%9B%E7%BE%8A%E8%82%89 200 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E7%94%9F%E9%B2%9C%E5%86%B7%E5%86%BB&cr_l2=%E7%A6%BD%E8%82%89%E8%9B%8B%E5%93%81 200 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E7%B2%AE%E6%B2%B9%E9%A3%9F%E5%93%81 200 0ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E7%B2%AE%E6%B2%B9%E9%A3%9F%E5%93%81&cr_l2=%E4%BC%91%E9%97%B2%E9%A3%9F%E5%93%81 200 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E7%B2%AE%E6%B2%B9%E9%A3%9F%E5%93%81&cr_l2=%E5%9C%B0%E6%96%B9%E7%89%B9%E4%BA%A7 200 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E7%B2%AE%E6%B2%B9%E9%A3%9F%E5%93%81 304 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E7%94%9F%E9%B2%9C%E5%86%B7%E5%86%BB 304 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E6%97%A5%E7%94%A8%E7%99%BE%E8%B4%A7 200 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E6%97%A5%E7%94%A8%E7%99%BE%E8%B4%A7&cr_l2=%E4%BC%A0%E7%BB%9F%E6%BB%8B%E8%A1%A5 200 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E6%97%A5%E7%94%A8%E7%99%BE%E8%B4%A7&cr_l2=%E4%BD%93%E8%82%B2%E7%94%A8%E5%93%81 200 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E6%97%A5%E7%94%A8%E7%99%BE%E8%B4%A7&cr_l2=%E5%81%A5%E8%BA%AB%E8%AE%AD%E7%BB%83 200 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E6%97%A5%E7%94%A8%E7%99%BE%E8%B4%A7 304 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E5%8A%9E%E5%85%AC%E7%94%A8%E5%93%81 200 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E5%8A%9E%E5%85%AC%E7%94%A8%E5%93%81&cr_l2=%E7%AC%94%E7%B1%BB%E4%BA%A7%E5%93%81 200 1ms
+POST /api/products/batch-delete 200 1ms
+GET /api/products?page=1&pageSize=15 200 2ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E5%8A%9E%E5%85%AC%E7%94%A8%E5%93%81&cr_l2=%E5%8A%9E%E5%85%AC%E5%99%A8%E6%9D%90 200 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E5%8A%9E%E5%85%AC%E7%94%A8%E5%93%81&cr_l2=%E6%89%93%E5%8D%B0%E8%80%97%E6%9D%90 200 0ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E5%8A%9E%E5%85%AC%E7%94%A8%E5%93%81&cr_l2=%E6%96%87%E5%85%B7 200 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E5%8A%9E%E5%85%AC%E7%94%A8%E5%93%81&cr_l2=%E7%BA%B8%E7%B1%BB%E4%BA%A7%E5%93%81 200 1ms
+GET /api/products/categories 304 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E5%8A%9E%E5%85%AC%E7%94%A8%E5%93%81 304 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E5%B7%A5%E4%B8%9A%E5%93%81 200 1ms
+GET /api/batch-image-import/sessions 304 0ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E5%B7%A5%E4%B8%9A%E5%93%81 304 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active 200 2ms
+GET /api/products?page=1&pageSize=15 304 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E5%B7%A5%E4%B8%9A%E5%93%81 304 1ms
+GET /api/products?page=1&pageSize=20&sort=price&order=desc&status=active&cr_l1=%E5%B7%A5%E4%B8%9A%E5%93%81&cr_l2=%E5%AE%89%E9%98%B2%E7%94%A8%E5%93%81 200 1ms
+GET /api/categories/customer 200 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 200 2ms
+GET /api/categories/customer 304 2ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 304 2ms
+GET /api/products/categories 200 1ms
+GET /api/batch-image-import/sessions 200 0ms
+GET /api/products?page=1&pageSize=15 200 1ms
+GET /api/products/5 200 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active&cr_l1=%E7%94%9F%E9%B2%9C%E5%86%B7%E5%86%BB 200 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active&cr_l1=%E7%94%9F%E9%B2%9C%E5%86%B7%E5%86%BB&cr_l2=%E4%B9%B3%E5%93%81%E5%86%B7%E9%A5%AE 200 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active&cr_l1=%E7%94%9F%E9%B2%9C%E5%86%B7%E5%86%BB 304 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active&cr_l1=%E7%94%9F%E9%B2%9C%E5%86%B7%E5%86%BB 304 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active&cr_l1=%E7%94%9F%E9%B2%9C%E5%86%B7%E5%86%BB 304 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 200 1ms
+GET /api/products?page=1&pageSize=20&sort=created_at&order=desc&status=active 200 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 304 1ms
+GET /api/products/categories 304 2ms
+GET /api/batch-image-import/sessions 304 0ms
+GET /api/products?page=1&pageSize=15 200 2ms
+GET /api/products?page=1&pageSize=15 304 1ms
+GET /api/products?page=1&pageSize=15 304 1ms
+GET /api/products?page=1&pageSize=15 304 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 200 2ms
+GET /api/categories/customer 200 1ms
+GET /api/products/categories 304 1ms
+GET /api/batch-image-import/sessions 304 1ms
+GET /api/products?page=1&pageSize=15 304 1ms
+GET /api/products?page=1&pageSize=15 304 1ms
+GET /api/products?page=1&pageSize=15 304 2ms
+GET /api/categories/customer 304 2ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active 304 1ms
+GET /api/products/5 200 1ms
+GET /api/products/5 200 1ms
+GET /api/products/5 200 1ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active&cr_l1=%E5%B7%A5%E4%B8%9A%E5%93%81 200 2ms
+GET /api/products?page=1&pageSize=20&sort=sort_order&order=asc&status=active&cr_l1=%E5%B7%A5%E4%B8%9A%E5%93%81 304 1ms
+GET /api/products/categories 304 2ms
+GET /api/batch-image-import/sessions 304 0ms
+GET /api/products/categories 304 1ms
+GET /api/batch-image-import/sessions 304 1ms

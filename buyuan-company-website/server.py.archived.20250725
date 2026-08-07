@@ -1,0 +1,1434 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+埠勤商贸 AI 助手后端服务
+Multi-Provider — 支持 DeepSeek AI供应商
+所有模型均支持 Function Calling + Vision，实现数据操作与智能对话
+"""
+
+import os, io, json, base64, sqlite3, re
+import sys
+from datetime import datetime
+from pathlib import Path
+
+import requests
+from flask import Flask, request, jsonify, send_from_directory
+from openpyxl import load_workbook
+from PIL import Image
+
+app = Flask(__name__)
+
+BASE_DIR = Path(__file__).resolve().parent
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
+if not DB_PASSWORD:
+    print("[FATAL] DB_PASSWORD 环境变量未设置")
+    sys.exit(1)
+
+DB_CONFIG = {"host":"127.0.0.1","user":"buqin_app","password":DB_PASSWORD,"database":"buqin_business","charset":"utf8mb4","cursorclass":pymysql.cursors.DictCursor,"autocommit":False}
+UPLOAD_DIR = BASE_DIR / "uploads"
+UPLOAD_DIR.mkdir(exist_ok=True)
+
+# ========== 多 AI 供应商配置 ==========
+AI_PROVIDERS = {
+    "deepseek": {
+        "name": "DeepSeek",
+        "icon": "🔍",
+        "api_key_env": "DEEPSEEK_API_KEY",
+        "base_url": "https://api.deepseek.com",
+        "models": [
+            {"id": "deepseek-chat",     "name": "DeepSeek-V3",    "desc": "最新通用 · 支持视觉 · 128K上下文"},
+            {"id": "deepseek-reasoner", "name": "DeepSeek-R1",    "desc": "深度推理 · 数学编程 · 思考链"},
+        ]
+    },
+
+}
+
+# AI 配置持久化文件
+AI_CONFIG_FILE = BASE_DIR / "ai_config.json"
+
+def load_ai_config():
+    """加载当前选中的供应商和模型"""
+    if AI_CONFIG_FILE.exists():
+        try:
+            with open(AI_CONFIG_FILE, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+            prov = cfg.get("provider", "deepseek")
+            model = cfg.get("model", "deepseek-chat")
+            # 校验是否合法
+            if prov in AI_PROVIDERS and any(m["id"] == model for m in AI_PROVIDERS[prov]["models"]):
+                return prov, model
+        except Exception:
+            pass
+    return "deepseek", "deepseek-chat"
+
+def save_ai_config(provider, model):
+    """持久化 AI 供应商/模型选择"""
+    with open(AI_CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump({"provider": provider, "model": model}, f, ensure_ascii=False)
+
+def get_api_key(provider):
+    """获取供应商 API Key"""
+    prov = AI_PROVIDERS.get(provider)
+    if not prov:
+        return ""
+    return os.environ.get(prov["api_key_env"], "")
+
+def get_base_url(provider):
+    """获取供应商 Base URL"""
+    prov = AI_PROVIDERS.get(provider)
+    if not prov:
+        return ""
+    # 其他AI供应商支持环境变量覆盖
+    if "base_url_env" in prov:
+        return os.environ.get(prov["base_url_env"], prov["base_url"])
+    return prov["base_url"]
+
+# 兼容旧的变量名
+DEEPSEEK_API_KEY = get_api_key("deepseek")
+DEEPSEEK_BASE_URL = get_base_url("deepseek")
+DEEPSEEK_MODEL = "deepseek-chat"
+
+# ========== 表格版本号（用于实时同步） ==========
+_table_versions = {}  # {table_name: int}  每次写入递增
+
+def _load_versions_from_db():
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        c = conn.cursor()
+        c.execute("SELECT table_name, version FROM table_meta")
+        result = {row["table_name"]: row["version"] for row in c.fetchall()}
+        conn.close()
+        return result
+    except Exception:
+        return {}
+
+_table_versions = _load_versions_from_db()  # 从数据库恢复
+
+def _bump_version(table_name: str):
+    """递增表格版本号"""
+    new_v = _table_versions.get(table_name, 0) + 1
+    _table_versions[table_name] = new_v
+    try:
+        conn = get_db()
+        with conn.cursor() as c2:
+        c2.execute(
+            "INSERT INTO table_meta(table_name,version) VALUES(%s,%s) ON DUPLICATE KEY UPDATE version=%s",
+            (table_name, new_v, new_v)
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+# ========== 业务表格定义 ==========
+TABLE_SCHEMAS = {
+    "销售表": {
+        "columns": ["编号", "订单编号", "订单日期", "收料单位", "供应商名称", "单品编码",
+                    "商品名称", "品牌", "单位", "数量", "单价（含税）", "订单小计（含税）", "业绩归属", "备注"],
+        "desc": "销售订单记录，每一行是一条销售出库记录"
+    },
+    "采购成本表": {
+        "columns": ["编号", "订单编号", "订单日期", "单品编码", "商品名称", "品牌", "单位",
+                    "数量", "不含税单价", "税率", "含税单价", "成本小计（含税）", "实际采购品牌",
+                    "采购定金", "采购尾款", "供货商名称", "联系人", "联系电话", "发货地址", "物流信息", "备注"],
+        "desc": "采购成本明细，记录每笔采购的成本、供应商、物流等信息"
+    },
+    "收款表": {
+        "columns": ["编号", "订单编号", "单品编码", "订单日期", "收料单位", "供应商名称", "订单小计（含税）",
+                    "折扣率", "服务费", "开票金额", "实收金额", "成本小计（含税）", "毛利", "税率",
+                    "税额", "净收入", "回款金额", "回款日期", "备注"],
+        "desc": "客户回款记录，与销售表对应，记录收款情况"
+    },
+    "费用表": {
+        "columns": ["编号", "订单编号", "订单日期", "收料单位", "单品编码", "报销日期", "物流费", "搬运费",
+                    "安装费", "业务费", "招待费", "交通费", "住宿费", "误餐费", "借支", "其他",
+                    "备注", "费用小计", "报销人", "审批人"],
+        "desc": "公司各项费用支出记录（物流费、搬运费、安装费、业务费、招待费等）"
+    },
+    "利润表": {
+        "columns": ["编号", "订单编号", "订单日期", "收料单位", "单品编码", "净收入", "费用小计", "利润", "业绩归属"],
+        "desc": "利润汇总表，按订单维度统计收入、成本、利润"
+    },
+    "每日流水": {
+        "columns": ["日期", "订单编号", "分类", "费用明细", "支出", "收入", "银行余额", "备注"],
+        "desc": "每日资金流水，记录付款、收款、费用报销等流水明细"
+    },
+    "承包确认单": {
+        "columns": ["月份", "姓名", "总利润", "承包费", "助理工资", "补助", "应得", "备注"],
+        "desc": "承包项目确认单，记录承包业务的确认信息"
+    },
+    "客户统计表": {
+        "columns": ["编号", "订单编号", "订单日期", "收料单位", "单品编码", "下单姓名", "下单人职务",
+                    "下单人电话", "收货人", "收货人联系方式", "收货地址", "客户分级", "备注"],
+        "desc": "客户信息统计，记录每个客户的联系信息和分级"
+    },
+    "平台结算折扣率": {
+        "columns": ["平台名称", "结算周期", "折扣率", "备注"],
+        "desc": "各平台结算折扣率配置表"
+    },
+}
+
+# ============================================================================
+# 数据库初始化
+# ============================================================================
+def get_db():
+    return pymysql.connect(**DB_CONFIG)
+
+    try:
+
+def init_db():
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute("SELECT 1")
+        c.execute("SELECT 1")
+        c.execute("SELECT 1")
+    except Exception:
+        pass
+
+    # 统一业务记录表：table_name 区分不同表格，row_data 存 JSON
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS table_meta (
+            table_name VARCHAR(100) PRIMARY KEY,
+            version INTEGER DEFAULT 0
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS business_records (
+            id INTEGER PRIMARY KEY AUTO_INCREMENT,
+            table_name TEXT NOT NULL,
+            row_data TEXT NOT NULL DEFAULT '{}',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_table_name ON business_records(table_name)')
+    try:
+        c.execute('''
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_bianhao
+            ON business_records(table_name, json_extract(row_data, "$.编号"))
+            WHERE json_extract(row_data, "$.编号") IS NOT NULL
+              AND json_extract(row_data, "$.编号") != ""
+        ''')
+    except Exception as e:
+        print(f"[WARN] 无法创建编号唯一索引: {e}")
+        conn.rollback()
+
+    # 原有 daily_records（兼容旧数据）
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS daily_records (
+            id INTEGER PRIMARY KEY AUTO_INCREMENT,
+            date TEXT NOT NULL,
+            category TEXT DEFAULT '',
+            item TEXT DEFAULT '',
+            amount REAL DEFAULT 0,
+            remark TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # 聊天历史
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS chat_history (
+            id INTEGER PRIMARY KEY AUTO_INCREMENT,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# ============================================================================
+# 业务表格 CRUD
+# ============================================================================
+def insert_table_row(table_name: str, row_data: dict) -> dict:
+    """向指定表格插入一行，编号不可重复"""
+    columns = TABLE_SCHEMAS.get(table_name, {}).get("columns", [])
+    # 只保留有效列
+    filtered = {}
+    for col in columns:
+        if col in row_data:
+            filtered[col] = row_data[col]
+
+    # 检查编号是否重复
+    bianhao = str(filtered.get("编号", "")).strip()
+    if bianhao:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute(
+            "SELECT id FROM business_records WHERE json_extract(row_data, '$.编号')=?",
+            (table_name, bianhao)
+        )
+        if c.fetchone():
+            conn.close()
+            return {"_error": True, "_dup_bianhao": bianhao, "_table": table_name}
+        conn.close()
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO business_records (table_name, row_data) VALUES (?, ?)",
+        (filtered,)
+    )
+    row_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    filtered["_id"] = row_id
+    return filtered
+
+def query_table_rows(table_name: str, limit: int = 100000) -> list:
+    """查询指定表格的所有行"""
+    conn = get_db()
+    conn.row_factory = None
+    c = conn.cursor()
+    c.execute(
+        "SELECT id, row_data, created_at FROM business_records WHERE table_name=? ORDER BY id ASC LIMIT ?",
+        (table_name, limit)
+    )
+    rows = []
+    for r in c.fetchall():
+        d = dict(r)
+        d["_id"] = r["id"]
+        d["_created_at"] = r["created_at"]
+        rows.append(d)
+    conn.close()
+    return list(reversed(rows))
+
+def delete_table_row(row_id: int) -> bool:
+    """删除指定行"""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("DELETE FROM business_records WHERE id=?", (row_id,))
+    affected = c.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+def get_table_row_count(table_name):
+    """获取指定表的行数"""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(f"SELECT COUNT(*) FROM `{table_name}`")
+    count = c.fetchone()[0]
+    conn.close()
+    return count
+
+def clear_table_rows(table_name: str):
+    """清空指定表格所有行"""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(f"DELETE FROM `{table_name}`")
+    conn.commit()
+    conn.close()
+
+def update_table_row(row_id: int, row_data: dict) -> dict:
+    """更新指定行，编号不可与其它行重复"""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT table_name, row_data FROM business_records WHERE id=?", (row_id,))
+    old = c.fetchone()
+    if not old:
+        conn.close()
+        return None
+    tname = old[0]
+    old_data = json.loads(old[1])
+    new_data = old_data.copy()
+    new_data.update(row_data)
+
+    # 检查编号是否与其它行冲突
+    new_bianhao = str(new_data.get("编号", "")).strip()
+    if new_bianhao:
+        c.execute(
+            "SELECT id FROM business_records WHERE json_extract(row_data, '$.编号')=? AND id!=?",
+            (tname, new_bianhao, row_id)
+        )
+        if c.fetchone():
+            conn.close()
+            return {"_error": True, "_dup_bianhao": new_bianhao, "_table": tname}
+
+    c.execute(
+        "UPDATE business_records SET row_data=? WHERE id=?",
+        (json.dumps(new_data, ensure_ascii=False), row_id)
+    )
+    conn.commit()
+    conn.close()
+    new_data["_id"] = row_id
+    return new_data
+
+def get_all_tables() -> dict:
+    """获取所有表格的全部数据（返回 ALL_DATA 格式供前端使用）"""
+    result = {}
+    conn = get_db()
+    conn.row_factory = None
+    c = conn.cursor()
+    for tname, schema in TABLE_SCHEMAS.items():
+        c.execute(
+            "SELECT id, row_data FROM business_records WHERE table_name=? ORDER BY id ASC",
+            (tname,)
+        )
+        rows = []
+        for r in c.fetchall():
+            d = dict(r)
+            d["_id"] = r["id"]
+            rows.append(d)
+        result[tname] = {
+            "headers": schema["columns"],
+            "rows": rows,
+            "row_count": len(rows),
+            "version": _table_versions.get(tname, 0)
+        }
+    conn.close()
+    return result
+
+def search_table_rows(table_name: str, keyword: str, limit: int = 100000) -> list:
+    """模糊搜索表格内容"""
+    conn = get_db()
+    conn.row_factory = None
+    c = conn.cursor()
+    # SQLite 全表扫描 + JSON 模糊匹配
+    c.execute(
+        "SELECT id, row_data FROM business_records WHERE row_data LIKE ? ORDER BY id ASC LIMIT ?",
+        (table_name, f"%{keyword}%", limit)
+    )
+    rows = []
+    for r in c.fetchall():
+        d = dict(r)
+        d["_id"] = r["id"]
+        rows.append(d)
+    conn.close()
+    return rows
+
+# 旧版兼容
+def insert_record(date_str, category, item, amount, remark):
+    return insert_table_row("每日流水", {
+        "日期": date_str, "分类": category, "费用明细": item,
+        "支出": str(amount), "收入": "", "银行余额": "", "备注": remark
+    })
+
+def query_records(date_str=None, limit=20):
+    return query_table_rows("每日流水", limit)
+
+def get_stats():
+    rows = query_table_rows("每日流水", 1000)
+    total_expense = sum(float(r.get("支出", 0) or 0) for r in rows)
+    total_income = sum(float(r.get("收入", 0) or 0) for r in rows)
+    cats = {}
+    for r in rows:
+        cat = r.get("分类", "其他")
+        cats[cat] = cats.get(cat, 0) + 1
+    return {
+        "total_records": len(rows),
+        "total_income": total_income,
+        "total_expense": total_expense,
+        "categories": [{"category": k, "count": v} for k, v in sorted(cats.items(), key=lambda x: -x[1])[:10]]
+    }
+
+def describe_table(table_name: str, include_sample: bool = True) -> dict:
+    """返回指定表格的列结构、说明和示例数据，供 AI 插入前确认"""
+    if table_name not in TABLE_SCHEMAS:
+        return {"error": f"未知表格: {table_name}", "available_tables": list(TABLE_SCHEMAS.keys())}
+
+    schema = TABLE_SCHEMAS[table_name]
+    columns = schema["columns"]
+    result = {
+        "table_name": table_name,
+        "description": schema.get("desc", ""),
+        "columns": columns,
+        "row_count": get_table_row_count(table_name)
+    }
+
+    if include_sample:
+        # 取最近 3 条作为示例
+        sample_rows = query_table_rows(table_name, limit=3)
+        # 过滤掉内部字段
+        clean_samples = []
+        for r in sample_rows:
+            clean = {k: v for k, v in r.items() if not k.startswith("_")}
+            clean_samples.append(clean)
+        result["sample_rows"] = clean_samples
+
+    return result
+
+# ============================================================================
+# AI 多供应商调用（统一接口）
+# ============================================================================
+def call_ai(messages, tools=None, provider=None, model_id=None):
+    """统一 AI 调用 — 根据当前配置或指定参数路由到不同供应商"""
+    prov_key, mod_id = load_ai_config()
+    if provider:
+        prov_key = provider
+    if model_id:
+        mod_id = model_id
+
+    prov = AI_PROVIDERS.get(prov_key)
+    if not prov:
+        return {"error": f"未知AI供应商: {prov_key}"}
+
+    api_key = get_api_key(prov_key)
+    if not api_key:
+        return {"error": f"未配置 {prov['name']} API Key (环境变量 {prov['api_key_env']})"}
+
+    base_url = get_base_url(prov_key)
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    # 构建 payload — 兼容 OpenAI 格式
+    temperature = 0.1
+    payload = {
+        "model": mod_id,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": 4096,
+        "top_p": 0.95,
+    }
+    if tools:
+        payload["tools"] = tools
+        payload["tool_choice"] = "auto"
+
+    # 构建 URL — 兼容有无 /v1 前缀
+    api_url = base_url.rstrip("/")
+    if "/v1" not in api_url:
+        api_url += "/v1"
+    api_url += "/chat/completions"
+
+    resp = requests.post(api_url, headers=headers, json=payload, timeout=120)
+    if resp.status_code != 200:
+        return {"error": f"{prov['name']} API {resp.status_code}: {resp.text[:300]}"}
+    return resp.json()
+
+# 兼容旧代码
+def call_deepseek(messages, tools=None):
+    return call_ai(messages, tools)
+
+def parse_dsml_tool_calls(content: str) -> list:
+    """解析 DeepSeek-R1 等模型在回复文本中输出的 DSML/XML 风格工具调用。
+
+    不依赖精确的分隔符字符（如 <｜｜DSML｜｜），只匹配 invoke/parameter 结构，
+    对不同的字符变体（全角竖线、半角等）都鲁棒。
+    """
+    if not content or "invoke name=" not in content:
+        return []
+
+    calls = []
+    # 匹配每个 invoke 块：invoke name="x">...</\S*invoke>
+    for m in re.finditer(r'invoke\s+name="([^"]+)"\s*>(.*?)</\S*invoke>', content, re.DOTALL):
+        name = m.group(1)
+        body = m.group(2)
+        args = {}
+        # 匹配每个 parameter 块
+        for pm in re.finditer(
+            r'parameter\s+name="([^"]+)"\s+string="(?:true|false)"\s*>(.*?)</\S*parameter>',
+            body, re.DOTALL
+        ):
+            pname = pm.group(1)
+            pval = pm.group(2).strip()
+            try:
+                pval = json.loads(pval)
+            except Exception:
+                pass
+            args[pname] = pval
+        calls.append({"name": name, "arguments": args})
+    return calls
+
+# ---------------------------------------------------------------------------
+# Excel/图片解析
+# ---------------------------------------------------------------------------
+def parse_excel(file_bytes, filename):
+    try:
+        wb = load_workbook(io.BytesIO(file_bytes), data_only=True)
+        all_text = []
+        for sn in wb.sheetnames:
+            ws = wb[sn]
+            all_text.append(f"## 工作表: {sn}")
+            rows_list = list(ws.iter_rows(values_only=True))
+            if not rows_list:
+                all_text.append("(空)")
+                continue
+            for i, row in enumerate(rows_list):
+                cells = [str(c) if c is not None else "" for c in row]
+                all_text.append(" | ".join(cells))
+                if i == 0 and len(rows_list) > 1:
+                    all_text.append("|".join(["---"] * len(cells)))
+        return "\n".join(all_text)
+    except Exception as e:
+        return f"[Excel 解析失败: {e}]"
+
+def parse_image(file_bytes):
+    try:
+        img = Image.open(io.BytesIO(file_bytes))
+        info = {"格式": img.format, "尺寸": f"{img.width}x{img.height}", "模式": img.mode}
+        try:
+            exif = img.getexif()
+            for tid, val in exif.items():
+                from PIL.ExifTags import TAGS
+                tag = TAGS.get(tid, tid)
+                if tag in ("DateTime", "Make", "Model"):
+                    info[tag] = str(val)
+        except:
+            pass
+        return {"text": "\n".join(f"{k}: {v}" for k, v in info.items()), "info": info}
+    except Exception as e:
+        return {"text": f"[图片解析失败: {e}]", "info": {}}
+
+# ============================================================================
+# System Prompt
+# ============================================================================
+SYSTEM_PROMPT = """你是埠勤商贸的 AI 数据助手「小埠」。你能操作公司所有业务表格。
+
+## 你能操作的表格
+| 表格名 | 用途 |
+|--------|------|
+| 销售表 | 销售订单，含收料单位、供应商、商品、数量、单价、合计 |
+| 采购成本表 | 采购成本明细，含不含税单价、税率、供货商、物流信息 |
+| 收款表 | 客户回款记录 |
+| 费用表 | 各项费用支出（物流、搬运、安装、业务费、招待费等） |
+| 利润表 | 利润汇总 |
+| 承包确认单 | 承包业务确认 |
+| 客户统计表 | 客户信息（姓名、职务、电话、地址、分级） |
+| 每日流水 | 资金流水（付款、收款、报销等） |
+| 平台结算折扣率 | 平台折扣率配置 |
+
+## 你的能力（都是对真实数据库的操作，不是生成示例）
+1. **插入数据**: 用户说"在销售表加一条"、"记一笔流水"等，提取表格名 + 各列值，调用 insert_table_row
+2. **查询数据**: 用户问"销售表有哪些"、"湖北的客户"等，调用 query_table
+3. **搜索**: 用户说"查一下包含xxx的记录"，在指定表调用 search_table
+4. **修改数据**: 用户说"把编号xxx的金额改成"、"更新某条记录"等，先查到该记录的 _id，再调用 update_table_row
+5. **删除**: 用户说"删掉id为xxx的那条"，调用 delete_row（删除前务必确认 _id）
+6. **分析**: 基于真实查询结果做汇总、统计、对比分析
+
+## 可用工具
+- `describe_table(table_name)`: 查看指定表格的列结构、说明和示例数据。不确定列名时务必先调用。
+- `insert_table_row(table_name, row_data)`: 向真实表格插入一行数据。
+- `query_table(table_name)`: 查询表格真实数据。
+- `search_table(table_name, keyword)`: 在真实表格中模糊搜索。
+- `update_table_row(row_id, row_data)`: 修改指定 _id 记录的字段。修改前需先查到该记录的 _id。
+- `delete_row(row_id)`: 删除指定 _id 的记录（删除前务必确认 _id）。
+- `get_statistics()`: 获取每日流水统计。
+
+## 规则
+- **所有增删改查都必须真实调用工具操作数据库，严禁编造、虚构或生成示例数据**。你只能操作工具返回的真实数据。
+- 日期未指定默认今天（{today}）
+- 金额用数字，不需要千分位逗号
+- 不确定表结构时，**先调用 describe_table 查看列名和示例**，再操作
+- 修改/删除前必须先用 query_table 或 search_table 查到目标记录的 `_id`，绝不允许猜测 id
+- 回复简洁友好，操作成功后告诉用户：对哪张表、哪条记录、做了什么
+- Excel/图片上传时仔细阅读内容，可批量导入
+- 如果用户没指定表格名，根据内容判断最合适的表格
+
+当前日期：{today}"""
+
+# ============================================================================
+# Function Tools —— 统一为 insert_table_row / search_table / query_table / delete_row
+# ============================================================================
+def build_table_tools():
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "insert_table_row",
+                "description": "向任意业务表格插入一行数据。table_name 必须是以下之一：销售表、采购成本表、收款表、费用表、利润表、承包确认单、客户统计表、每日流水、平台结算折扣率。row_data 是一个 JSON 对象，键为列名，值为对应的数据。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "table_name": {
+                            "type": "string",
+                            "description": "表格名称，如：销售表、采购成本表、收款表、费用表、利润表、承包确认单、客户统计表、每日流水、平台结算折扣率"
+                        },
+                        "_removed_col": {
+                            "type": "object",
+                            "description": "行数据，key 为列名，value 为值。例如 销售表: {\"编号\":\"1\",\"订单日期\":\"2026-07-23\",\"收料单位\":\"武汉\",\"供应商名称\":\"张三\",\"商品名称\":\"拖把\",\"品牌\":\"埠乐\",\"单位\":\"个\",\"数量\":\"5\",\"单价（含税）\":\"10\",\"合计（含税）\":\"50\"}"
+                        }
+                    },
+                    "required": ["table_name", "_removed_col"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "query_table",
+                "description": "查询指定表格的所有数据",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "table_name": {
+                            "type": "string",
+                            "description": "表格名称"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "返回条数，默认50"
+                        }
+                    },
+                    "required": ["table_name"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "search_table",
+                "description": "在指定表格中模糊搜索关键词",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "table_name": {
+                            "type": "string",
+                            "description": "表格名称"
+                        },
+                        "keyword": {
+                            "type": "string",
+                            "description": "搜索关键词"
+                        }
+                    },
+                    "required": ["table_name", "keyword"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "delete_row",
+                "description": "删除指定 ID 的记录。需要先查表确认 ID。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "row_id": {
+                            "type": "integer",
+                            "description": "要删除的记录 ID（_id）"
+                        }
+                    },
+                    "required": ["row_id"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "update_table_row",
+                "description": "修改指定记录的字段值。修改前必须先通过 query_table 或 search_table 查到目标记录的 _id。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "row_id": {
+                            "type": "integer",
+                            "description": "要修改的记录 ID（_id）"
+                        },
+                        "_removed_col": {
+                            "type": "object",
+                            "description": "要更新的字段，key 为列名，value 为新值。例如 {\"合计（含税）\":\"80\",\"数量\":\"8\"}"
+                        }
+                    },
+                    "required": ["row_id", "_removed_col"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_statistics",
+                "description": "获取每日流水的统计信息（总额、分类汇总）",
+                "parameters": {"type": "object", "properties": {}}
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "describe_table",
+                "description": "查看指定表格的列结构、说明和最近示例数据。在不确定列名或需要了解表结构时调用。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "table_name": {
+                            "type": "string",
+                            "description": "表格名称，如：销售表、采购成本表、收款表、费用表、利润表、承包确认单、客户统计表、每日流水、平台结算折扣率"
+                        },
+                        "include_sample": {
+                            "type": "boolean",
+                            "description": "是否返回示例数据，默认 true"
+                        }
+                    },
+                    "required": ["table_name"]
+                }
+            }
+        },
+    ]
+    return tools
+
+TOOLS = build_table_tools()
+
+# ============================================================================
+# 聊天历史
+# ============================================================================
+def save_chat(role, content):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("INSERT INTO chat_history (role, content) VALUES (?,?)", (role, content))
+    # 清理超过 1 天的旧记录（保留一天历史）
+    c.execute("DELETE FROM chat_history WHERE created_at < datetime('now', '-1 day')")
+    conn.commit()
+    conn.close()
+
+def load_chat_history(limit=10):
+    conn = get_db()
+    conn.row_factory = None
+    c = conn.cursor()
+    c.execute("SELECT role, content FROM chat_history ORDER BY id ASC LIMIT ?", (limit,))
+    rows = [{"role": r["role"], "content": r["content"]} for r in c.fetchall()]
+    conn.close()
+    return list(reversed(rows))
+
+def get_recent_chat_history(hours=24):
+    """返回最近 N 小时内的聊天记录（正序，供前端展示），并清理过期记录"""
+    conn = get_db()
+    conn.row_factory = None
+    c = conn.cursor()
+    # 清理过期记录
+    c.execute("DELETE FROM chat_history WHERE created_at < datetime('now', '-1 day')")
+    # 只取最近 N 小时
+    c.execute(
+        "SELECT role, content, created_at FROM chat_history WHERE created_at >= datetime('now', ?) ORDER BY id ASC",
+        (f"-{hours} hours",)
+    )
+    rows = [{"role": r["role"], "content": r["content"], "created_at": r["created_at"]} for r in c.fetchall()]
+    conn.commit()
+    conn.close()
+    return rows
+
+# ============================================================================
+# API 路由
+# ============================================================================
+# ---------------------------------------------------------------------------
+# AI 供应商 & 模型配置接口
+# ---------------------------------------------------------------------------
+@app.route("/api/ai/models", methods=["GET"])
+def list_ai_models():
+    """列出所有 AI 供应商及其模型"""
+    prov_key, cur_model = load_ai_config()
+    providers = []
+    for pk, p in AI_PROVIDERS.items():
+        api_ok = bool(get_api_key(pk))
+        providers.append({
+            "id": pk,
+            "name": p["name"],
+            "icon": p.get("icon", ""),
+            "api_ok": api_ok,
+            "models": [{"id": m["id"], "name": m["name"], "desc": m["desc"]} for m in p["models"]]
+        })
+    return jsonify({
+        "providers": providers,
+        "current_provider": prov_key,
+        "current_model": cur_model
+    })
+
+@app.route("/api/ai/config", methods=["GET"])
+def get_ai_config():
+    """获取当前 AI 配置"""
+    prov_key, cur_model = load_ai_config()
+    prov = AI_PROVIDERS.get(prov_key, {})
+    return jsonify({
+        "provider": prov_key,
+        "provider_name": prov.get("name", ""),
+        "provider_icon": prov.get("icon", ""),
+        "model": cur_model,
+        "model_name": next((m["name"] for m in prov.get("models", []) if m["id"] == cur_model), cur_model),
+        "api_ok": bool(get_api_key(prov_key)),
+        "api_key_env": prov.get("api_key_env", ""),
+    })
+
+@app.route("/api/ai/config", methods=["POST"])
+def set_ai_config():
+    """切换 AI 供应商/模型"""
+    data = request.get_json(force=True, silent=True) or {}
+    provider = data.get("provider", "").strip()
+    model_id = data.get("model", "").strip()
+
+    if provider not in AI_PROVIDERS:
+        return jsonify({"error": f"未知供应商: {provider}, 可选: {list(AI_PROVIDERS.keys())}"}), 400
+
+    prov = AI_PROVIDERS[provider]
+    valid_models = [m["id"] for m in prov["models"]]
+    if model_id not in valid_models:
+        return jsonify({"error": f"模型 {model_id} 不在 {prov['name']} 中, 可选: {valid_models}"}), 400
+
+    if not get_api_key(provider):
+        return jsonify({"error": f"{prov['name']} 未配置 API Key (需设置环境变量 {prov['api_key_env']})"}), 400
+
+    save_ai_config(provider, model_id)
+    return jsonify({
+        "success": True,
+        "provider": provider,
+        "provider_name": prov["name"],
+        "model": model_id,
+        "model_name": next((m["name"] for m in prov["models"] if m["id"] == model_id), model_id),
+    })
+
+@app.route("/api/health", methods=["GET"])
+def health():
+    prov_key, cur_model = load_ai_config()
+    prov = AI_PROVIDERS.get(prov_key, {})
+    return jsonify({
+        "status": "ok",
+        "provider": prov_key,
+        "provider_name": prov.get("name", ""),
+        "model": cur_model,
+        "has_api_key": bool(get_api_key(prov_key))
+    })
+
+@app.route("/api/chat", methods=["POST"])
+def chat():
+    try:
+        text = request.form.get("message", "")
+        file = request.files.get("file")
+        if not text and not file:
+            return jsonify({"error": "请提供消息或文件"}), 400
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        today_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+        messages = []
+        user_content = []
+        file_info = ""
+
+        # 处理上传文件
+        if file:
+            file_bytes = file.read()
+            filename = file.filename or ""
+            ext = Path(filename).suffix.lower() if filename else ""
+
+            if ext in (".xlsx", ".xls"):
+                excel_text = parse_excel(file_bytes, filename)
+                file_info = f"\n\n【用户上传了 Excel: {filename}】\n{excel_text}"
+            elif ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"):
+                img_result = parse_image(file_bytes)
+                file_info = f"\n\n【用户上传了图片: {filename}】\n{img_result['text']}"
+                b64 = base64.b64encode(file_bytes).decode("utf-8")
+                mime = f"image/{ext.lstrip('.')}"
+                if ext == ".jpg": mime = "image/jpeg"
+                user_content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mime};base64,{b64}"}
+                })
+            else:
+                try:
+                    text_content = file_bytes.decode("utf-8")
+                    file_info = f"\n\n【用户上传了文件: {filename}】\n{text_content}"
+                except:
+                    file_info = f"\n\n【用户上传了文件: {filename}（无法解析）】"
+
+        # 系统提示
+        messages.append({"role": "system", "content": SYSTEM_PROMPT.format(today=today)})
+
+        # 历史对话
+        history = load_chat_history(10)
+        for h in history:
+            messages.append({"role": h["role"], "content": h["content"]})
+
+        # 当前消息
+        if user_content:
+            user_content.insert(0, {"type": "text", "text": text + file_info if text else file_info})
+            messages.append({"role": "user", "content": user_content})
+        else:
+            messages.append({"role": "user", "content": text + file_info if file_info else text})
+
+        save_chat("user", text or f"[上传文件: {file.filename if file else '未知'}]")
+
+        # 多轮工具调用循环：支持 AI 多步推理与操作（如先查后改/删）
+        actions = []
+        reply = ""
+        MAX_TOOL_ROUNDS = 6
+        for _round in range(MAX_TOOL_ROUNDS):
+            result = call_deepseek(messages, tools=TOOLS)
+            if "error" in result:
+                if _round == 0:
+                    return jsonify({"reply": f"AI 服务暂时不可用: {result['error']}", "actions": []}), 500
+                reply = msg.get("content") or reply or "操作部分完成，但 AI 后续响应失败。"
+                break
+
+            msg = result["choices"][0]["message"]
+
+            # 处理 function calling（标准 OpenAI 格式 或 DSML 文本格式）
+            raw_tool_calls = msg.get("tool_calls") or []
+            # 对 DeepSeek-R1 等模型，工具调用可能以 DSML/XML 文本形式输出
+            if not raw_tool_calls and isinstance(msg.get("content"), str):
+                dsml_calls = parse_dsml_tool_calls(msg["content"])
+                if dsml_calls:
+                    raw_tool_calls = [
+                        {
+                            "id": f"call_dsml_{i}",
+                            "function": {"name": c["name"], "arguments": json.dumps(c["arguments"], ensure_ascii=False)},
+                            "type": "function"
+                        }
+                        for i, c in enumerate(dsml_calls)
+                    ]
+                # 移除原文中的 DSML 标记，避免重复显示
+                msg["content"] = re.sub(
+                    r'<[^>]*tool_calls[^>]*>.*?</[^>]*tool_calls[^>]*>',
+                    '', msg["content"], flags=re.DOTALL
+                ).strip()
+
+            if not raw_tool_calls:
+                reply = msg.get("content", "")
+                break
+
+            for tc in raw_tool_calls:
+                func = tc.get("function", {})
+                func_name = func.get("name", "")
+                args_str = func.get("arguments", "{}")
+                try:
+                    args = json.loads(args_str) if isinstance(args_str, str) else args_str
+                except Exception:
+                    args = {}
+                tool_result = ""
+
+                if func_name == "insert_table_row":
+                    rec = insert_table_row(args["table_name"], args["_removed_col"])
+                    if rec.get("_error"):
+                        tool_result = json.dumps({"success": False, "error": f"编号 '{rec['_dup_bianhao']}' 在{rec['_table']}中已存在，不能重复"}, ensure_ascii=False)
+                    else:
+                        tool_result = json.dumps({"success": True, "table": args["table_name"], "row": rec}, ensure_ascii=False)
+                        actions.append({"type": "insert", "table": args["table_name"], "row": rec})
+
+                elif func_name == "query_table":
+                    rows = query_table_rows(args["table_name"], args.get("limit", 50))
+                    tool_result = json.dumps(rows, ensure_ascii=False, default=str)
+
+                elif func_name == "search_table":
+                    rows = search_table_rows(args["table_name"], args["keyword"], args.get("limit", 100))
+                    tool_result = json.dumps(rows, ensure_ascii=False, default=str)
+
+                elif func_name == "delete_row":
+                    ok = delete_table_row(args["row_id"])
+                    tool_result = json.dumps({"success": ok, "deleted_id": args["row_id"]}, ensure_ascii=False)
+
+                elif func_name == "update_table_row":
+                    upd = update_table_row(args["row_id"], args.get("_removed_col", {}))
+                    if upd is None:
+                        tool_result = json.dumps({"success": False, "error": f"未找到 _id={args['row_id']} 的记录，请先查询确认"}, ensure_ascii=False)
+                    elif isinstance(upd, dict) and upd.get("_error"):
+                        tool_result = json.dumps({"success": False, "error": f"编号 {upd.get('_dup_bianhao')} 在{upd.get('_table')}中已存在，不可重复"}, ensure_ascii=False)
+                    else:
+                        tool_result = json.dumps({"success": True, "updated_id": args["row_id"], "new_data": upd}, ensure_ascii=False, default=str)
+                        actions.append({"type": "update", "table": args.get("table_name", ""), "row": upd})
+
+                elif func_name == "get_statistics":
+                    stats = get_stats()
+                    tool_result = json.dumps(stats, ensure_ascii=False)
+
+                elif func_name == "describe_table":
+                    info = describe_table(args["table_name"], args.get("include_sample", True))
+                    tool_result = json.dumps(info, ensure_ascii=False, default=str)
+
+                else:
+                    tool_result = json.dumps({"success": False, "error": f"未知工具: {func_name}"}, ensure_ascii=False)
+
+                messages.append({
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [tc]
+                })
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.get("id", "call_1"),
+                    "content": tool_result
+                })
+        else:
+            # 达到最大轮数仍未结束（防止 AI 陷入工具循环）
+            reply = (msg.get("content") or "") + "\n\n（已达到最大操作步数，如需继续请补充指令）"
+
+        save_chat("assistant", reply)
+
+        return jsonify({"reply": reply, "actions": actions, "time": today_time})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"reply": f"处理出错: {str(e)}", "actions": []}), 500
+
+@app.route("/api/chat/history", methods=["GET"])
+def get_chat_history_api():
+    """返回最近 24 小时的聊天历史（供前端持久化展示，一天后自动删除）"""
+    hours = request.args.get("hours", default=24, type=int)
+    records = get_recent_chat_history(hours)
+    return jsonify({"history": records})
+
+# ---- 前端数据同步 API ----
+@app.route("/api/tables", methods=["GET"])
+def get_all_tables_api():
+    """返回所有表格数据（ALL_DATA 格式，供前端使用）"""
+    return jsonify(get_all_tables())
+
+@app.route("/api/tables/version", methods=["GET"])
+def get_tables_version_api():
+    """返回所有表格的版本号（轻量级，前端用于检测数据变化）"""
+    return jsonify({k: _table_versions.get(k, 0) for k in TABLE_SCHEMAS})
+
+@app.route("/api/tables/<table_name>", methods=["GET"])
+def get_table_api(table_name):
+    """获取指定表格数据"""
+    if table_name not in TABLE_SCHEMAS:
+        return jsonify({"error": f"未知表格: {table_name}"}), 404
+    rows = query_table_rows(table_name)
+    return jsonify({
+        "headers": TABLE_SCHEMAS[table_name]["columns"],
+        "rows": rows,
+        "row_count": len(rows)
+    })
+
+@app.route("/api/tables/<table_name>", methods=["POST"])
+def post_table_api(table_name):
+    """插入一行到指定表格"""
+    if table_name not in TABLE_SCHEMAS:
+        return jsonify({"error": f"未知表格: {table_name}"}), 404
+    data = request.get_json(force=True, silent=True) or {}
+    rec = insert_table_row(table_name, data)
+    if rec.get("_error"):
+        return jsonify({"error": f"编号 '{rec['_dup_bianhao']}' 在{rec['_table']}中已存在，不能重复"}), 409
+    _bump_version(table_name)
+    return jsonify({"success": True, "row": rec})
+
+@app.route("/api/tables/<table_name>/batch", methods=["POST"])
+def batch_insert_api(table_name):
+    """批量插入行"""
+    if table_name not in TABLE_SCHEMAS:
+        return jsonify({"error": f"未知表格: {table_name}"}), 404
+    data = request.get_json(force=True, silent=True) or {}
+    rows = data.get("rows", [])
+    inserted = []
+    dup_error = None
+    for r in rows:
+        rec = insert_table_row(table_name, r)
+        if rec.get("_error"):
+            dup_error = rec["_dup_bianhao"]
+            break
+        inserted.append(rec)
+    if dup_error:
+        _bump_version(table_name)
+        return jsonify({"success": False, "error": f"编号 '{dup_error}' 已存在，不能重复。已导入 {len(inserted)} 条", "inserted": len(inserted)}), 409
+    _bump_version(table_name)
+    return jsonify({"success": True, "inserted": len(inserted), "rows": inserted})
+
+@app.route("/api/tables/<table_name>/rows/delete", methods=["POST"])
+def batch_delete_rows_api(table_name):
+    """批量按编号删除行（数据库直接删除，不走全表同步）"""
+    data = request.get_json(force=True, silent=True) or {}
+    bianhaos = data.get("bianhaos", [])
+    if not bianhaos:
+        return jsonify({"success": False, "error": "未提供编号"}), 400
+    conn = get_db()
+    c = conn.cursor()
+    deleted = 0
+    for bh in bianhaos:
+        bh_str = str(bh).strip()
+        c.execute(
+            "SELECT id FROM business_records WHERE json_extract(row_data, '$.编号') = ?",
+            (table_name, bh_str)
+        )
+        for row in c.fetchall():
+            c.execute("DELETE FROM business_records WHERE id=?", (row[0],))
+            deleted += 1
+    conn.commit()
+    conn.close()
+    _bump_version(table_name)
+    new_version = _table_versions.get(table_name, 0)
+    return jsonify({"success": True, "deleted": deleted, "version": new_version})
+
+@app.route("/api/tables/<table_name>/sync", methods=["PUT"])
+def sync_table_api(table_name):
+    """全量替换同步：先清空再插入，支持删除操作（多人协作时注意最后保存者覆盖）"""
+    if table_name not in TABLE_SCHEMAS:
+        return jsonify({"error": f"未知表格: {table_name}"}), 404
+    data = request.get_json(silent=True)
+    if not data or "rows" not in data:
+        return jsonify({"error": "缺少 rows 字段"}), 400
+
+    rows = data["rows"]
+    # 检查批次内是否有重复编号
+    seen_bianhao = set()
+    dup_bianhao = None
+    for r in rows:
+        if isinstance(r, dict):
+            bh = str(r.get("编号", "")).strip()
+            if bh:
+                if bh in seen_bianhao:
+                    dup_bianhao = bh
+                    break
+                seen_bianhao.add(bh)
+    if dup_bianhao:
+        return jsonify({"error": f"编号 '{dup_bianhao}' 在数据中重复出现，请修复后重新导入", "_dup_bianhao": dup_bianhao}), 409
+    # 全量替换：先清空该表旧数据，再插入客户端最新数据（支持删除）
+    columns = TABLE_SCHEMAS[table_name]["columns"]
+    conn = get_db()
+    c = conn.cursor()
+    inserted = 0
+    skipped = 0
+    try:
+        # 先删除该表所有旧数据
+        c.execute(f"DELETE FROM `{table_name}`")
+        deleted_count = c.rowcount
+
+        # 再插入客户端最新数据
+        for r in rows:
+            if not isinstance(r, dict):
+                skipped += 1
+                continue
+            # 过滤出表schema中定义的列，同时保留 _id 以便前端匹配
+            filtered = {col: r.get(col, "") for col in columns if col in r}
+            # 如果一行里所有列都为空，跳过
+            all_empty = all(str(v).strip() == "" for v in filtered.values())
+            if all_empty:
+                skipped += 1
+                continue
+            row_json = json.dumps(filtered, ensure_ascii=False)
+            c.execute("INSERT INTO business_records (table_name, row_data) VALUES (?, ?)", (table_name, row_json))
+            inserted += 1
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        import traceback; traceback.print_exc()
+        return jsonify({"error": f"同步失败: {str(e)}"}), 500
+    conn.close()
+    _bump_version(table_name)
+    new_version = _table_versions.get(table_name, 0)
+    return jsonify({"success": True, "inserted": inserted, "deleted_old": deleted_count, "skipped": skipped, "version": new_version})
+
+@app.route("/api/records/<int:row_id>", methods=["PUT"])
+def update_record_api(row_id):
+    """更新单条记录"""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "缺少数据"}), 400
+    row = update_table_row(row_id, data)
+    if row is None:
+        return jsonify({"error": "记录不存在"}), 404
+    if row.get("_error"):
+        return jsonify({"error": f"编号 '{row['_dup_bianhao']}' 在{row['_table']}中已存在，不能重复"}), 409
+    return jsonify({"success": True, "row": row})
+
+def _match_columns(excel_headers, schema_cols):
+    """匹配Excel列名到schema列名，返回 (col_map, score)
+    优先精确匹配，再模糊匹配，避免 订单编号 被错误映射到 编号
+    """
+    col_map = {}
+    matched_schema = set()
+
+    # 第一轮：精确匹配（列名完全相同）
+    for ei, eh in enumerate(excel_headers):
+        if not eh:
+            continue
+        for sc in schema_cols:
+            if eh == sc:
+                col_map[ei] = sc
+                matched_schema.add(sc)
+                break
+
+    # 第二轮：模糊匹配（包含关系），已匹配的 schema 列不再参与
+    for ei, eh in enumerate(excel_headers):
+        if not eh or ei in col_map:
+            continue
+        for sc in schema_cols:
+            if sc in matched_schema:
+                continue
+            if eh in sc or sc in eh:
+                col_map[ei] = sc
+                matched_schema.add(sc)
+                break
+
+    return col_map, len(col_map)
+
+def _find_best_header_and_sheet(wb, table_name):
+    """在Excel所有工作表中找到最佳匹配的表头行（处理合并单元格）"""
+    schema_cols = TABLE_SCHEMAS[table_name]["columns"]
+    all_candidates = []
+
+    for sn in wb.sheetnames:
+        ws = wb[sn]
+        raw_rows = list(ws.iter_rows(values_only=True))
+        if len(raw_rows) < 2:
+            continue
+
+        # 尝试前4行作为候选表头行
+        search_rows = min(4, len(raw_rows))
+        for header_row_idx in range(search_rows):
+            excel_headers = [str(c).strip() if c is not None else "" for c in raw_rows[header_row_idx]]
+            col_map, score = _match_columns(excel_headers, schema_cols)
+            if score > 0:
+                all_candidates.append({
+                    "sheet_name": sn,
+                    "sheet": ws,
+                    "header_row_idx": header_row_idx,
+                    "headers": excel_headers,
+                    "col_map": col_map,
+                    "score": score,
+                    "raw_rows": raw_rows
+                })
+
+        # 额外奖励：工作表名称匹配目标表名
+        for c in all_candidates:
+            if c["sheet_name"] == table_name:
+                c["score"] += 100
+
+    if not all_candidates:
+        return None
+
+    # 按分数降序排列，选最佳
+    all_candidates.sort(key=lambda x: -x["score"])
+    return all_candidates[0]
+
+@app.route("/api/tables/<table_name>/import", methods=["POST"])
+def excel_import_api(table_name):
+    """Excel 批量导入到指定表格"""
+    if table_name not in TABLE_SCHEMAS:
+        return jsonify({"error": f"未知表格: {table_name}"}), 404
+
+    if "file" not in request.files:
+        return jsonify({"error": "请上传文件"}), 400
+
+    f = request.files["file"]
+    if not f.filename:
+        return jsonify({"error": "文件名为空"}), 400
+
+    ext = Path(f.filename).suffix.lower()
+    if ext not in (".xlsx", ".xls"):
+        return jsonify({"error": "仅支持 .xlsx / .xls 文件"}), 400
+
+    try:
+        file_bytes = f.read()
+        wb = load_workbook(io.BytesIO(file_bytes), data_only=True)
+
+        best = _find_best_header_and_sheet(wb, table_name)
+        if best is None:
+            schema_cols = TABLE_SCHEMAS[table_name]["columns"]
+            return jsonify({
+                "error": "列名无法匹配。表格要求的列: " + ", ".join(schema_cols[:12]) +
+                         "。请检查Excel表头是否包含这些列名"
+            }), 400
+
+        ws = best["sheet"]
+        col_map = best["col_map"]
+        raw_rows = best["raw_rows"]
+        header_row_idx = best["header_row_idx"]
+        excel_headers = best["headers"]
+
+        # 从表头行下一行开始解析数据
+        parsed_rows = []
+        skipped = 0
+        for raw_row in raw_rows[header_row_idx + 1:]:
+            row_data = {}
+            has_value = False
+            for ei, cell_value in enumerate(raw_row):
+                sc = col_map.get(ei)
+                if sc:
+                    val = str(cell_value).strip() if cell_value is not None else ""
+                    row_data[sc] = val
+                    if val:
+                        has_value = True
+            if has_value:
+                parsed_rows.append(row_data)
+            else:
+                skipped += 1
+
+        if not parsed_rows:
+            return jsonify({"error": "没有解析到有效数据行"}), 400
+
+        inserted = []
+        dup_skipped = []
+        for r in parsed_rows:
+            rec = insert_table_row(table_name, r)
+            if rec.get("_error"):
+                dup_skipped.append(rec["_dup_bianhao"])
+            else:
+                inserted.append(rec)
+        _bump_version(table_name)
+        new_version_import = _table_versions.get(table_name, 0)
+
+        result = {
+            "success": True,
+            "version": new_version_import,
+            "skipped": skipped,
+            "inserted": len(inserted),
+            "sheet_used": best["sheet_name"],
+            "header_row": header_row_idx + 1,
+            "matched_columns": {list(excel_headers)[k]: list(col_map.values())[i]
+                                for i, k in enumerate(col_map) if k < len(excel_headers)},
+            "rows": inserted
+        }
+        if dup_skipped:
+            result["dup_skipped"] = dup_skipped
+            result["warning"] = f"以下编号已存在被跳过({len(dup_skipped)}条): {', '.join(dup_skipped[:10])}" + ("..." if len(dup_skipped) > 10 else "")
+        return jsonify(result)
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"解析失败: {str(e)}"}), 500
+
+@app.route("/api/records/<int:row_id>", methods=["DELETE"])
+def delete_row_api(row_id):
+    """删除指定行"""
+    # 先查表名，再删除
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT table_name FROM business_records WHERE id=?", (row_id,))
+    row = c.fetchone()
+    conn.close()
+    tname = row[0] if row else None
+    ok = delete_table_row(row_id)
+    if ok and tname:
+        _bump_version(tname)
+    return jsonify({"success": ok})
+
+@app.route("/api/records/<int:row_id>", methods=["PUT"])
+def update_row_api(row_id):
+    """更新指定行"""
+    # 先查表名
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT table_name FROM business_records WHERE id=?", (row_id,))
+    row = c.fetchone()
+    conn.close()
+    tname = row[0] if row else None
+    data = request.get_json(force=True, silent=True) or {}
+    rec = update_table_row(row_id, data)
+    if rec is None:
+        return jsonify({"error": "记录不存在"}), 404
+    if rec.get("_error"):
+        return jsonify({"error": f"编号 '{rec['_dup_bianhao']}' 在{rec['_table']}中已存在，不能重复"}), 409
+    if tname:
+        _bump_version(tname)
+    return jsonify({"success": True, "row": rec})
+
+# 旧接口兼容
+@app.route("/api/records", methods=["GET"])
+def get_records():
+    date = request.args.get("date")
+    limit = int(request.args.get("limit", 50))
+    return jsonify(query_records(date, limit))
+
+@app.route("/api/stats", methods=["GET"])
+def stats():
+    return jsonify(get_stats())
+
+# ---- 静态文件 ----
+@app.route("/")
+def serve_frontend():
+    return send_from_directory(str(BASE_DIR), "chat.html")
+
+# ============================================================================
+if __name__ == "__main__":
+    prov_key, cur_model = load_ai_config()
+    prov = AI_PROVIDERS.get(prov_key, {})
+    print(f"埠勤 AI 助手 v3 (多供应商)")
+    print(f"   供应商: {prov.get('name', prov_key)}  |  模型: {cur_model}")
+    print(f"   DB:     {DB_PATH}")
+    for pk, p in AI_PROVIDERS.items():
+        status = "✅ 已配置" if get_api_key(pk) else "❌ 未配置"
+        print(f"   {p.get('icon','')} {p['name']}: {status}  ({p['api_key_env']})")
+    app.run(host="0.0.0.0", port=8085, debug=False)

@@ -1,0 +1,76 @@
+@app.route("/api/parse-file",methods=["POST"])
+def parse_file_api():
+ try:
+  f=request.files.get("file");tn=request.form.get("table","")
+  if not f:return jsonify({"s":0,"e":"no file"}),400
+  if tn not in TABLE_SCHEMAS:return jsonify({"s":0,"e":"bad table"}),400
+  n=(f.filename or "").lower();b=f.read();t="";ft="file"
+  if n.endswith((".xls",".xlsx",".xlsm")):t=parse_excel(b,n);ft="excel"
+  elif n.endswith((".png",".jpg",".jpeg",".gif",".webp",".bmp")):t=parse_image(b);ft="image"
+  elif n.endswith(".pdf"):t=b.decode("utf-8","ignore");ft="pdf"
+  elif n.endswith((".csv",".txt")):t=b.decode("utf-8","ignore");ft="csv" if n.endswith(".csv") else "text"
+  else:
+   try:t=b.decode("utf-8","ignore");ft="text"
+   except:return jsonify({"s":0,"e":"bad fmt"}),400
+  if isinstance(t,dict):t=t.get("text",str(t))
+  s=str(t)[:6000]
+  if not s.strip():return jsonify({"s":0,"e":"empty"}),400
+  cs=TABLE_SCHEMAS[tn]["columns"];ds=TABLE_SCHEMAS[tn].get("desc",tn)
+  pr="Table: "+str(tn)+"("+str(ds)+"). Columns: "+"、".join(cs)
+  pr+=". Content:\n---\n"+s+"\n---\n"
+  pr+="Return ONLY JSON: {fields:{ColumnName:value}}. Keys MUST match one of the column names. No markdown."
+  ms=[{"role":"user","content":pr}]
+  rr=call_deepseek(ms)
+  if not rr:return jsonify({"s":0,"e":"AI fail"}),500
+  if isinstance(rr,dict) and rr.get("error"):return jsonify({"s":0,"e":rr["error"]}),500
+  if isinstance(rr,dict):
+   chs=rr.get("choices",[])
+   r=chs[0].get("message",{}).get("content","") if chs else ""
+  elif isinstance(rr,str):r=rr
+  else:r=str(rr)
+  if not r or not r.strip():return jsonify({"s":0,"e":"no result"}),500
+  import sys;sys.stderr.write("AI_RAW:"+str(r)[:500]+"\n");sys.stderr.flush()
+  import json as j,re as x
+  jt=r
+  md=x.search(r"```(?:json)?\s*([\s\S]*?)```",r)
+  if md:jt=md.group(1).strip()
+  try:
+   try:m=j.loads(jt)
+   except:
+    m0=x.search(r"\{[^{}]*?fields[^{}]*?:\s*\{[^{}]*?\}",jt)
+    if not m0:m0=x.search(r"\{[^{}]*fields[^}]*\}",jt)
+    if m0:
+     raw_part=m0.group()
+     raw2=x.sub(r'"\1":',r'([\w\u4e00-\u9fff]+):',raw_part)
+     try:m=j.loads(raw2)
+     except:m=j.loads(raw_part)
+    else:return jsonify({"s":0,"e":"bad json","raw":r[:300]}),500
+   raw_fields=m.get("fields",{})
+   if not raw_fields and isinstance(m,dict):
+    hk=[k for k in m.keys() if isinstance(k,str)]
+    if hk:
+     mk=any((k in cs or any(k in cc or cc in k for cc in cs)) for k in hk)
+     if mk:raw_fields=m
+   nm={}
+   for k,v in raw_fields.items():
+    if v is None or str(v).strip()=="":continue
+    vv=str(v).strip();mt=None
+    for cc in cs:
+     if k==cc:mt=cc;break
+    if not mt:
+     for cc in cs:
+      if k in cc or cc in k:mt=cc;break
+    if not mt:
+     for cc in cs:
+      sc=sum(1 for c in k if c in cc)
+      if sc>=max(len(k)//2,1) and sc>=max(len(cc)//3,1):mt=cc;break
+    if mt:
+     if chr(26085)in mt:vv=normalize_date_val(vv)
+     nm[mt]=vv
+   return jsonify({"s":1,"fields":nm,"ft":ft,"n":len(nm),"ai_len":len(r)})
+  except Exception as e2:
+   import sys;sys.stderr.write("JSON_ERR:"+str(e2)+"\n");sys.stderr.flush()
+   return jsonify({"s":0,"e":"json err","raw":r[:300]}),500
+ except Exception as e:
+  import traceback;traceback.print_exc()
+  return jsonify({"s":0,"e":"server err"}),500

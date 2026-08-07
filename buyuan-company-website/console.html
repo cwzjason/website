@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>埠勤商贸 - 管理控制台</title>
+<style>
+/* ===== CSS Variables ===== */
+:root {
+  --primary: #d97706;
+  --primary-dark: #b45309;
+  --primary-light: #f59e0b;
+  --primary-glow: rgba(217,119,6,0.3);
+  --secondary: #0f0f23;
+  --text: #334155;
+  --text-light: #64748b;
+  --text-muted: #94a3b8;
+  --bg: #ffffff;
+  --bg-gray: #f8fafc;
+  --border: #e2e8f0;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
+  --shadow-lg: 0 20px 40px -8px rgba(0,0,0,0.08);
+  --shadow-xl: 0 25px 50px -12px rgba(0,0,0,0.15);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --blue: #16347a;
+  --blue-light: #3867da;
+  --green: #059669;
+  --green-light: #10b981;
+  --red: #dc2626;
+  --red-light: #ef4444;
+  --sidebar-width: 240px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+  color: var(--text); line-height: 1.7;
+  background: var(--bg-gray); min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+a { text-decoration: none; color: inherit; }
+
+/* ===== 顶栏 ===== */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 56px;
+  background: linear-gradient(135deg, var(--blue) 0%, #1e40af 100%);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; z-index: 100;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+}
+.topbar-brand {
+  display: flex; align-items: center; gap: 10px;
+  color: #fff; font-size: 18px; font-weight: 700;
+}
+.topbar-brand .brand-icon {
+  width: 32px; height: 32px; background: rgba(255,255,255,0.15);
+  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+.topbar-right {
+  display: flex; align-items: center; gap: 16px;
+}
+.topbar-right .admin-badge {
+  padding: 5px 14px; background: rgba(255,255,255,0.12);
+  border-radius: 20px; color: #fff; font-size: 13px; font-weight: 500;
+  display: flex; align-items: center; gap: 6px;
+}
+}
+
+/* ===== 侧边栏 ===== */
+.sidebar {
+  position: fixed; top: 56px; left: 0; bottom: 0; width: var(--sidebar-width);
+  background: #fff; border-right: 1px solid var(--border);
+  overflow-y: auto; z-index: 50;
+  box-shadow: 2px 0 12px rgba(0,0,0,0.04);
+}
+.sidebar-section {
+  padding: 16px 12px 8px;
+}
+.sidebar-section-title {
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 1px;
+  padding: 0 12px 8px;
+}
+.sidebar-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 8px;
+  font-size: 14px; color: var(--text-light); cursor: pointer;
+  transition: all 0.2s; margin-bottom: 2px; font-weight: 500;
+}
+.sidebar-item:hover { background: #f1f5f9; color: var(--text); }
+.sidebar-item.active {
+  background: #eff6ff; color: var(--blue);
+  font-weight: 600;
+}
+.sidebar-item .badge {
+  margin-left: auto; background: var(--red);
+  color: #fff; font-size: 11px; padding: 2px 8px;
+  border-radius: 10px; font-weight: 600;
+  min-width: 22px; text-align: center;
+}
+
+/* ===== 主内容 ===== */
+.main-content {
+  margin-left: var(--sidebar-width); margin-top: 56px;
+  padding: 28px 32px; min-height: calc(100vh - 56px);
+}
+
+/* ===== KPI 卡片行 ===== */
+.kpi-row {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px; margin-bottom: 28px;
+}
+.kpi-card {
+  background: #fff; border-radius: 14px; padding: 20px 22px;
+  box-shadow: var(--shadow-sm);
+  display: flex; align-items: center; gap: 14px;
+  transition: all 0.2s; border: 1px solid transparent;
+}
+.kpi-card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-1px);
+}
+.kpi-icon {
+  width: 48px; height: 48px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; flex-shrink: 0;
+}
+.kpi-icon.blue { background: #eff6ff; }
+.kpi-icon.orange { background: #fff7ed; }
+.kpi-icon.green { background: #ecfdf5; }
+.kpi-icon.red { background: #fef2f2; }
+.kpi-info { flex: 1; min-width: 0; }
+.kpi-label { font-size: 12px; color: var(--text-muted); margin-bottom: 2px; }
+.kpi-value { font-size: 28px; font-weight: 800; color: #1e293b; line-height: 1; }
+.kpi-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+/* ===== 面板 ===== */
+.panel {
+  background: #fff; border-radius: 14px;
+  box-shadow: var(--shadow-sm); margin-bottom: 24px;
+  overflow: hidden;
+}
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 24px; border-bottom: 1px solid #f1f5f9;
+}
+.panel-header h3 {
+  font-size: 16px; font-weight: 700; color: #1e293b;
+  display: flex; align-items: center; gap: 8px;
+}
+.panel-header .count {
+  font-size: 13px; color: var(--text-muted); font-weight: 500;
+}
+
+/* ===== 筛选栏 ===== */
+.filter-bar {
+  display: flex; gap: 10px; padding: 14px 24px;
+  border-bottom: 1px solid #f1f5f9;
+  flex-wrap: wrap; align-items: center;
+}
+.filter-bar .btn-filter {
+  padding: 7px 16px; border: 1px solid var(--border);
+  border-radius: 8px; background: #fff; font-size: 13px;
+  cursor: pointer; font-family: inherit; color: var(--text-light);
+  transition: all 0.2s; font-weight: 500;
+}
+.filter-bar .btn-filter:hover { border-color: #cbd5e1; background: #f8fafc; }
+.filter-bar .btn-filter.active {
+  background: var(--blue); color: #fff; border-color: var(--blue);
+}
+.search-input {
+  padding: 7px 14px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; font-family: inherit;
+  outline: none; width: 200px; transition: all 0.2s;
+}
+.search-input:focus {
+  border-color: var(--blue-light);
+  box-shadow: 0 0 0 3px rgba(56,103,218,0.08);
+}
+
+/* ===== 表格 ===== */
+.table-wrap {
+  overflow-x: auto;
+}
+table {
+  width: 100%; border-collapse: collapse;
+  font-size: 13px;
+}
+thead th {
+  text-align: left; padding: 12px 16px;
+  background: #f8fafc; color: var(--text-light);
+  font-weight: 600; font-size: 12px; text-transform: uppercase;
+  letter-spacing: 0.5px; border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+tbody td {
+  padding: 14px 16px; border-bottom: 1px solid #f1f5f9;
+  color: var(--text); vertical-align: middle;
+}
+tbody tr { transition: background 0.15s; }
+tbody tr:hover { background: #fafbfc; }
+tbody tr:nth-child(even) { background: #fcfcfd; }
+tbody tr:nth-child(even):hover { background: #f8fafc; }
+
+/* 状态标签 */
+.status-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 12px; border-radius: 20px;
+  font-size: 12px; font-weight: 600;
+}
+.status-pending { background: #fef3c7; color: #92400e; }
+.status-approved { background: #d1fae5; color: #065f46; }
+.status-rejected { background: #fee2e2; color: #991b1b; }
+
+/* 操作按钮 */
+.btn-action {
+  padding: 5px 14px; border-radius: 6px; border: none;
+  cursor: pointer; font-size: 12px; font-weight: 600;
+  font-family: inherit; transition: all 0.2s;
+}
+.btn-approve { background: #d1fae5; color: #065f46; }
+.btn-approve:hover { background: #a7f3d0; }
+.btn-reject { background: #fee2e2; color: #991b1b; }
+.btn-reject:hover { background: #fecaca; }
+.btn-detail { background: #eff6ff; color: #1e40af; }
+.btn-detail:hover { background: #dbeafe; }
+.btn-undo { background: #fef3c7; color: #92400e; }
+.btn-undo:hover { background: #fde68a; }
+
+/* ===== 空状态 ===== */
+.empty-state {
+  text-align: center; padding: 60px 20px; color: var(--text-muted);
+}
+.empty-state .icon { font-size: 52px; margin-bottom: 16px; display: block; }
+.empty-state h4 { font-size: 16px; color: var(--text-light); margin-bottom: 6px; }
+.empty-state p { font-size: 13px; }
+
+/* ===== 模态框 ===== */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.45); backdrop-filter: blur(4px);
+  z-index: 5000; display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.3s;
+}
+.modal-overlay.show { opacity: 1; pointer-events: auto; }
+.modal {
+  background: #fff; border-radius: 16px; width: 90%; max-width: 500px;
+  padding: 32px 28px; box-shadow: var(--shadow-xl);
+  transform: translateY(20px); transition: transform 0.3s;
+}
+.modal-overlay.show .modal { transform: translateY(0); }
+.modal h2 {
+  font-size: 18px; font-weight: 700; color: var(--secondary);
+  margin-bottom: 20px; display: flex; align-items: center; gap: 8px;
+}
+.modal .detail-row {
+  display: flex; padding: 10px 0; border-bottom: 1px solid #f1f5f9;
+  font-size: 14px;
+}
+.modal .detail-label {
+  width: 80px; flex-shrink: 0; color: var(--text-muted); font-weight: 500;
+}
+.modal .detail-value { color: var(--text); font-weight: 500; }
+.modal-actions {
+  display: flex; gap: 10px; margin-top: 24px; justify-content: flex-end;
+}
+.modal-actions button {
+  padding: 10px 24px; border-radius: 8px; border: none;
+  cursor: pointer; font-size: 14px; font-weight: 600;
+  font-family: inherit; transition: all 0.2s;
+}
+.modal-actions .btn-ok {
+  background: var(--bg-gray); color: var(--text);
+  border: 1px solid var(--border);
+}
+.modal-actions .btn-ok:hover { background: #e2e8f0; }
+
+/* ===== Toast ===== */
+.toast {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  padding: 12px 24px; border-radius: 10px;
+  font-size: 14px; font-weight: 500; z-index: 9999;
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: var(--shadow-lg); color: #fff;
+  display: flex; align-items: center; gap: 8px;
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
+.toast.success { background: #059669; }
+.toast.error { background: #dc2626; }
+.toast.info { background: #2563eb; }
+
+/* ===== 响应式 ===== */
+@media (max-width: 1024px) {
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 768px) {
+  .sidebar { width: 0; overflow: hidden; }
+  .sidebar.open { width: var(--sidebar-width); z-index: 60; }
+  .main-content { margin-left: 0; padding: 20px 16px; }
+  .kpi-row { grid-template-columns: 1fr 1fr; }
+  .filter-bar { padding: 12px 16px; }
+  thead th, tbody td { padding: 10px 10px; font-size: 12px; }
+}
+@media (max-width: 500px) {
+  .kpi-row { grid-template-columns: 1fr; }
+  .topbar { padding: 0 14px; }
+  .topbar-brand { font-size: 15px; }
+  .main-content { padding: 16px 10px; }
+}
+</style>
+</head>
+<body>
+
+<!-- 顶栏 -->
+<header class="topbar">
+  <div class="topbar-brand">
+    <div class="brand-icon">🏢</div>
+    <span>埠勤商贸 · 管理控制台</span>
+  </div>
+  <div class="topbar-right">
+    <span class="admin-badge">🛡️ 管理员</span>
+  </div>
+</header>
+
+<!-- 侧边栏 -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">导航菜单</div>
+    <div class="sidebar-item active" data-panel="approval" onclick="switchPanel('approval')">
+      📋 审批管理
+      <span class="badge" id="pendingBadge">0</span>
+    </div>
+    <div class="sidebar-item" data-panel="allUsers" onclick="switchPanel('allUsers')">
+      👥 用户列表
+    </div>
+    <div class="sidebar-item" onclick="window.location.href='login.html'">
+      🔐 返回登录
+    </div>
+    <div class="sidebar-item" onclick="window.location.href='index.html'">
+      🏠 返回首页
+    </div>
+  </div>
+</aside>
+
+<!-- 主内容区 -->
+<main class="main-content">
+
+  <!-- KPI 行 -->
+  <div class="kpi-row" id="kpiRow">
+    <div class="kpi-card">
+      <div class="kpi-icon blue">📋</div>
+      <div class="kpi-info">
+        <div class="kpi-label">待审批</div>
+        <div class="kpi-value" id="kpiPending">0</div>
+        <div class="kpi-sub">员工注册申请</div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon green">✅</div>
+      <div class="kpi-info">
+        <div class="kpi-label">已批准</div>
+        <div class="kpi-value" id="kpiApproved">0</div>
+        <div class="kpi-sub">累计通过</div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon red">❌</div>
+      <div class="kpi-info">
+        <div class="kpi-label">已拒绝</div>
+        <div class="kpi-value" id="kpiRejected">0</div>
+        <div class="kpi-sub">累计拒绝</div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon orange">👥</div>
+      <div class="kpi-info">
+        <div class="kpi-label">总注册</div>
+        <div class="kpi-value" id="kpiTotal">0</div>
+        <div class="kpi-sub">全部申请记录</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 审批管理面板 -->
+  <div class="panel" id="panelApproval">
+    <div class="panel-header">
+      <h3>📋 员工注册审批</h3>
+      <span class="count" id="approvalCount">共 0 条</span>
+    </div>
+    <div class="filter-bar">
+      <button class="btn-filter active" data-filter="all" onclick="setFilter('all')">全部</button>
+      <button class="btn-filter" data-filter="pending" onclick="setFilter('pending')">⏳ 待审批</button>
+      <button class="btn-filter" data-filter="approved" onclick="setFilter('approved')">✅ 已通过</button>
+      <button class="btn-filter" data-filter="rejected" onclick="setFilter('rejected')">❌ 已拒绝</button>
+      <input type="text" class="search-input" id="searchApproval" placeholder="🔍 搜索姓名或邮箱..." oninput="renderApprovalTable()">
+    </div>
+    <div class="table-wrap" id="approvalTableWrap">
+      <!-- 动态渲染 -->
+    </div>
+  </div>
+
+  <!-- 用户列表面板 -->
+  <div class="panel" id="panelAllUsers" style="display:none;">
+    <div class="panel-header">
+      <h3>👥 全部用户列表</h3>
+      <span class="count" id="allUserCount">共 0 条</span>
+    </div>
+    <div class="filter-bar">
+      <input type="text" class="search-input" id="searchUsers" placeholder="🔍 搜索姓名或邮箱..." oninput="renderAllUsersTable()">
+      <button class="btn-filter" style="margin-left:auto;" onclick="exportUsersCSV()">📥 导出CSV</button>
+    </div>
+    <div class="table-wrap" id="allUsersTableWrap">
+      <!-- 动态渲染 -->
+    </div>
+  </div>
+
+</main>
+
+<!-- 详情弹窗 -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal">
+    <h2>📄 申请详情</h2>
+    <div id="detailContent"></div>
+    <div class="modal-actions">
+      <button class="btn-ok" onclick="closeDetailModal()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===== 初始化 ===== */
+let currentFilter = 'all';
+let currentPanel = 'approval';
+let currentRegistrations = [];
+
+function loadData() {
+  currentRegistrations = JSON.parse(localStorage.getItem('buqin_registrations') || '[]');
+}
+
+function saveData() {
+  localStorage.setItem('buqin_registrations', JSON.stringify(currentRegistrations));
+}
+
+function init() {
+  loadData();
+  updateKPIs();
+  renderApprovalTable();
+  updatePendingBadge();
+}
+
+/* ===== KPI 更新 ===== */
+function updateKPIs() {
+  const pending = currentRegistrations.filter(r => !r.approved && !r.rejected).length;
+  const approved = currentRegistrations.filter(r => r.approved).length;
+  const rejected = currentRegistrations.filter(r => r.rejected).length;
+  document.getElementById('kpiPending').textContent = pending;
+  document.getElementById('kpiApproved').textContent = approved;
+  document.getElementById('kpiRejected').textContent = rejected;
+  document.getElementById('kpiTotal').textContent = currentRegistrations.length;
+}
+
+function updatePendingBadge() {
+  const pending = currentRegistrations.filter(r => !r.approved && !r.rejected).length;
+  const badge = document.getElementById('pendingBadge');
+  badge.textContent = pending;
+  badge.style.display = pending > 0 ? 'inline' : 'none';
+}
+
+/* ===== 筛选 ===== */
+function setFilter(filter) {
+  currentFilter = filter;
+  document.querySelectorAll('.btn-filter').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-filter="${filter}"]`).classList.add('active');
+  renderApprovalTable();
+}
+
+function getFilteredRegs() {
+  let data = currentRegistrations;
+  if (currentFilter === 'pending') data = data.filter(r => !r.approved && !r.rejected);
+  else if (currentFilter === 'approved') data = data.filter(r => r.approved);
+  else if (currentFilter === 'rejected') data = data.filter(r => r.rejected);
+
+  const search = document.getElementById('searchApproval').value.trim().toLowerCase();
+  if (search) {
+    data = data.filter(r => r.name.toLowerCase().includes(search) || r.email.toLowerCase().includes(search));
+  }
+  return data.reverse();
+}
+
+/* ===== 审批表格 ===== */
+function renderApprovalTable() {
+  const data = getFilteredRegs();
+  const wrap = document.getElementById('approvalTableWrap');
+  document.getElementById('approvalCount').textContent = `共 ${data.length} 条`;
+
+  if (data.length === 0) {
+    wrap.innerHTML = `<div class="empty-state"><span class="icon">📭</span><h4>暂无记录</h4><p>当前没有${currentFilter === 'all' ? '' : currentFilter === 'pending' ? '待审批的' : currentFilter === 'approved' ? '已通过的' : '已拒绝的'}申请</p></div>`;
+    return;
+  }
+
+  let html = `<table><thead><tr>
+    <th>申请人</th><th>邮箱</th><th>手机号</th><th>部门</th>
+    <th>申请时间</th><th>状态</th><th style="text-align:center;">操作</th>
+  </tr></thead><tbody>`;
+
+  data.forEach(r => {
+    const time = new Date(r.appliedAt).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+    let statusHtml = '';
+    let actionHtml = '';
+    if (r.approved) {
+      statusHtml = '<span class="status-badge status-approved">✅ 已通过</span>';
+      actionHtml = `<button class="btn-action btn-undo" onclick="undoApproval(${r.id})">↩ 撤销</button>
+        <button class="btn-action btn-detail" onclick="showDetail(${r.id})">查看</button>`;
+    } else if (r.rejected) {
+      statusHtml = '<span class="status-badge status-rejected">❌ 已拒绝</span>';
+      actionHtml = `<button class="btn-action btn-undo" onclick="undoApproval(${r.id})">↩ 撤销</button>
+        <button class="btn-action btn-detail" onclick="showDetail(${r.id})">查看</button>`;
+    } else {
+      statusHtml = '<span class="status-badge status-pending">⏳ 待审批</span>';
+      actionHtml = `<button class="btn-action btn-approve" onclick="approveReg(${r.id})">✓ 通过</button>
+        <button class="btn-action btn-reject" onclick="rejectReg(${r.id})">✕ 拒绝</button>
+        <button class="btn-action btn-detail" onclick="showDetail(${r.id})">查看</button>`;
+    }
+    html += `<tr>
+      <td><strong>${escapeHtml(r.name)}</strong></td>
+      <td>${escapeHtml(r.email)}</td>
+      <td>${escapeHtml(r.phone || '-')}</td>
+      <td>${escapeHtml(r.dept || '-')}</td>
+      <td>${time}</td>
+      <td>${statusHtml}</td>
+      <td style="text-align:center;">${actionHtml}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+/* ===== 审批操作 ===== */
+function approveReg(id) {
+  const reg = currentRegistrations.find(r => r.id === id);
+  if (!reg || reg.approved || reg.rejected) return;
+  reg.approved = true;
+  reg.approvedAt = new Date().toISOString();
+  saveData();
+  updateKPIs(); updatePendingBadge(); renderApprovalTable();
+  if (currentPanel === 'allUsers') renderAllUsersTable();
+  showToast(`✅ 已批准「${reg.name}」的注册申请`, 'success');
+}
+
+function rejectReg(id) {
+  const reg = currentRegistrations.find(r => r.id === id);
+  if (!reg || reg.approved || reg.rejected) return;
+  reg.rejected = true;
+  reg.approvedAt = null;
+  saveData();
+  updateKPIs(); updatePendingBadge(); renderApprovalTable();
+  if (currentPanel === 'allUsers') renderAllUsersTable();
+  showToast(`已拒绝「${reg.name}」的注册申请`, 'info');
+}
+
+function undoApproval(id) {
+  const reg = currentRegistrations.find(r => r.id === id);
+  if (!reg) return;
+  reg.approved = false;
+  reg.rejected = false;
+  reg.approvedAt = null;
+  saveData();
+  updateKPIs(); updatePendingBadge(); renderApprovalTable();
+  if (currentPanel === 'allUsers') renderAllUsersTable();
+  showToast(`↩ 已撤销「${reg.name}」的审批决定`, 'info');
+}
+
+/* ===== 详情弹窗 ===== */
+function showDetail(id) {
+  const reg = currentRegistrations.find(r => r.id === id);
+  if (!reg) return;
+  const time = new Date(reg.appliedAt).toLocaleString('zh-CN');
+  const approvedTime = reg.approvedAt ? new Date(reg.approvedAt).toLocaleString('zh-CN') : '-';
+  let status = '⏳ 待审批';
+  if (reg.approved) status = '✅ 已通过';
+  else if (reg.rejected) status = '❌ 已拒绝';
+
+  document.getElementById('detailContent').innerHTML = `
+    <div class="detail-row"><div class="detail-label">姓名</div><div class="detail-value">${escapeHtml(reg.name)}</div></div>
+    <div class="detail-row"><div class="detail-label">邮箱</div><div class="detail-value">${escapeHtml(reg.email)}</div></div>
+    <div class="detail-row"><div class="detail-label">手机号</div><div class="detail-value">${escapeHtml(reg.phone || '-')}</div></div>
+    <div class="detail-row"><div class="detail-label">部门</div><div class="detail-value">${escapeHtml(reg.dept || '-')}</div></div>
+    <div class="detail-row"><div class="detail-label">状态</div><div class="detail-value">${status}</div></div>
+    <div class="detail-row"><div class="detail-label">申请时间</div><div class="detail-value">${time}</div></div>
+    <div class="detail-row"><div class="detail-label">审批时间</div><div class="detail-value">${approvedTime}</div></div>
+  `;
+  document.getElementById('detailModal').classList.add('show');
+}
+function closeDetailModal() {
+  document.getElementById('detailModal').classList.remove('show');
+}
+document.getElementById('detailModal').addEventListener('click', function(e) {
+  if (e.target === this) closeDetailModal();
+});
+
+/* ===== 面板切换 ===== */
+function switchPanel(panel) {
+  currentPanel = panel;
+  document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+  document.querySelector(`[data-panel="${panel}"]`).classList.add('active');
+  document.getElementById('panelApproval').style.display = panel === 'approval' ? '' : 'none';
+  document.getElementById('panelAllUsers').style.display = panel === 'allUsers' ? '' : 'none';
+  if (panel === 'allUsers') renderAllUsersTable();
+  if (panel === 'approval') renderApprovalTable();
+}
+
+/* ===== 全部用户列表 ===== */
+function renderAllUsersTable() {
+  const search = document.getElementById('searchUsers').value.trim().toLowerCase();
+  let data = [...currentRegistrations];
+  if (search) {
+    data = data.filter(r => r.name.toLowerCase().includes(search) || r.email.toLowerCase().includes(search));
+  }
+  data = data.reverse();
+  const wrap = document.getElementById('allUsersTableWrap');
+  document.getElementById('allUserCount').textContent = `共 ${data.length} 条`;
+
+  if (data.length === 0) {
+    wrap.innerHTML = `<div class="empty-state"><span class="icon">👥</span><h4>暂无用户</h4><p>还没有员工注册记录</p></div>`;
+    return;
+  }
+
+  let html = `<table><thead><tr>
+    <th>申请人</th><th>邮箱</th><th>手机号</th><th>部门</th>
+    <th>申请时间</th><th>状态</th><th>审批时间</th>
+  </tr></thead><tbody>`;
+
+  data.forEach(r => {
+    const time = new Date(r.appliedAt).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+    const approvedTime = r.approvedAt ? new Date(r.approvedAt).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '-';
+    let statusHtml;
+    if (r.approved) statusHtml = '<span class="status-badge status-approved">✅ 已通过</span>';
+    else if (r.rejected) statusHtml = '<span class="status-badge status-rejected">❌ 已拒绝</span>';
+    else statusHtml = '<span class="status-badge status-pending">⏳ 待审批</span>';
+
+    html += `<tr>
+      <td><strong>${escapeHtml(r.name)}</strong></td>
+      <td>${escapeHtml(r.email)}</td>
+      <td>${escapeHtml(r.phone || '-')}</td>
+      <td>${escapeHtml(r.dept || '-')}</td>
+      <td>${time}</td>
+      <td>${statusHtml}</td>
+      <td>${approvedTime}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+/* ===== 导出CSV ===== */
+function exportUsersCSV() {
+  const data = [...currentRegistrations].reverse();
+  if (data.length === 0) { showToast('没有可导出的数据', 'info'); return; }
+  const header = '姓名,邮箱,手机号,部门,申请时间,状态,审批时间\n';
+  const rows = data.map(r => {
+    let status = '待审批';
+    if (r.approved) status = '已通过';
+    else if (r.rejected) status = '已拒绝';
+    return [
+      r.name, r.email, r.phone || '', r.dept || '',
+      new Date(r.appliedAt).toLocaleString('zh-CN'),
+      status,
+      r.approvedAt ? new Date(r.approvedAt).toLocaleString('zh-CN') : ''
+    ].map(v => `"${v}"`).join(',');
+  }).join('\n');
+  const blob = new Blob(['\uFEFF' + header + rows], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `员工注册列表_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  showToast('📥 导出成功', 'success');
+}
+
+/* ===== Toast ===== */
+let toastTimer;
+function showToast(msg, type) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg; toast.className = 'toast ' + type + ' show';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+/* ===== 工具函数 ===== */
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+/* ===== 键盘快捷键 ===== */
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeDetailModal();
+});
+
+// 启动
+init();
+</script>
+
+<script src="assets/js/auth-guard.js?v=5"></script>
+</body>
+</html>

@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>批量图片导入 - 埠勤商贸</title>
+<style>
+  :root {
+    --primary: #4f6ef7; --primary-hover: #3b5de7; --primary-light: #eef1ff;
+    --success: #27ae60; --success-light: #eafaf1;
+    --warning: #f39c12; --warning-light: #fef9e7;
+    --danger: #e74c3c; --danger-light: #fdedec;
+    --bg: #f5f6fa; --card-bg: #fff;
+    --border: #e8ecf1; --text: #2c3e50; --text-light: #7f8c8d;
+    --radius: 10px; --shadow: 0 2px 12px rgba(0,0,0,.06);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text); min-height: 100vh;
+  }
+
+  .topbar {
+    background: var(--card-bg); border-bottom: 1px solid var(--border);
+    padding: 0 24px; height: 56px; display: flex; align-items: center;
+    justify-content: space-between; box-shadow: var(--shadow);
+    position: sticky; top:0; z-index:100;
+  }
+  .topbar .logo { font-size:18px; font-weight:700; color:var(--primary); display:flex; align-items:center; gap:8px; }
+  .topbar nav { display:flex; gap:20px; }
+  .topbar nav a { color:var(--text-light); text-decoration:none; font-size:14px; padding:4px 0; border-bottom:2px solid transparent; transition:.2s; }
+  .topbar nav a:hover, .topbar nav a.active { color:var(--primary); border-color:var(--primary); }
+
+  .container { max-width:1200px; margin:0 auto; padding:24px; }
+
+  /* 步骤导航 */
+  .step-nav {
+    display:flex; gap:0; background:var(--card-bg); border-radius:var(--radius);
+    box-shadow:var(--shadow); margin-bottom:20px; overflow:hidden;
+  }
+  .step-nav .step {
+    flex:1; padding:16px 12px; text-align:center; cursor:pointer;
+    font-size:13px; color:var(--text-light); border-bottom:3px solid transparent;
+    transition:.2s; position:relative; user-select:none;
+  }
+  .step-nav .step:hover { background:#f8f9fb; }
+  .step-nav .step.active { color:var(--primary); border-bottom-color:var(--primary); font-weight:600; }
+  .step-nav .step.completed { color:var(--success); }
+  .step-nav .step .num {
+    display:inline-flex; width:24px; height:24px; border-radius:50%;
+    background:#e8ecf1; align-items:center; justify-content:center;
+    font-size:12px; font-weight:700; margin-right:4px;
+  }
+  .step-nav .step.active .num { background:var(--primary); color:#fff; }
+  .step-nav .step.completed .num { background:var(--success); color:#fff; }
+
+  /* 卡片 */
+  .card {
+    background:var(--card-bg); border-radius:var(--radius);
+    box-shadow:var(--shadow); margin-bottom:20px; border:1px solid var(--border);
+  }
+  .card-header {
+    padding:16px 24px; border-bottom:1px solid var(--border);
+    font-size:15px; font-weight:600; display:flex; align-items:center; justify-content:space-between;
+  }
+  .card-body { padding:24px; }
+
+  /* 两个card并排 */
+  .card-row { display:flex; gap:20px; }
+  .card-row .card { flex:1; min-width:0; }
+
+  /* 按钮 */
+  .btn {
+    display:inline-flex; align-items:center; gap:6px; padding:10px 20px;
+    border-radius:8px; font-size:14px; font-weight:500; border:none; cursor:pointer;
+    transition:.2s; text-decoration:none;
+  }
+  .btn-primary { background:var(--primary); color:#fff; }
+  .btn-primary:hover { background:var(--primary-hover); }
+  .btn-success { background:var(--success); color:#fff; }
+  .btn-success:hover { background:#219a52; }
+  .btn-danger { background:var(--danger); color:#fff; }
+  .btn-danger:hover { background:#c0392b; }
+  .btn-outline { background:#fff; color:var(--primary); border:1px solid var(--primary); }
+  .btn-outline:hover { background:var(--primary-light); }
+  .btn-sm { padding:6px 14px; font-size:12px; }
+  .btn-lg { padding:14px 32px; font-size:16px; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+
+  .btn-group { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+
+  /* 上传区域 */
+  .upload-zone {
+    border:2px dashed #c4c7cc; border-radius:var(--radius); padding:48px 40px;
+    text-align:center; cursor:pointer; transition:.25s; background:#fafafa;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color:var(--primary); background:var(--primary-light);
+  }
+  .upload-zone .icon { font-size:48px; margin-bottom:12px; opacity:.6; }
+  .upload-zone p { color:var(--text-light); font-size:14px; }
+  .upload-zone .file-count { margin-top:8px; font-size:12px; color:var(--primary); font-weight:600; }
+  .upload-zone.big { padding:60px 40px; min-height:200px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+
+  /* 提示信息 */
+  .alert {
+    padding:12px 16px; border-radius:8px; font-size:13px; line-height:1.6;
+    margin-bottom:16px;
+  }
+  .alert-info { background:var(--primary-light); color:#1a3a8a; border:1px solid #c5d0ff; }
+  .alert-success { background:var(--success-light); color:#145a32; border:1px solid #a9dfbf; }
+  .alert-warning { background:var(--warning-light); color:#7d6608; border:1px solid #f9e79f; }
+  .alert-danger { background:var(--danger-light); color:#922b21; border:1px solid #f5b7b1; }
+
+  /* 表格 */
+  .data-table {
+    width:100%; border-collapse:collapse; font-size:13px;
+  }
+  .data-table th {
+    background:#f8f9fb; padding:10px 12px; text-align:left; font-weight:600;
+    border-bottom:2px solid var(--border); color:var(--text-light); font-size:12px;
+    white-space:nowrap;
+  }
+  .data-table td {
+    padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle;
+  }
+  .data-table tr:hover { background:#f8f9fb; }
+  .data-table .zero { color:#ccc; }
+
+  /* 状态标签 */
+  .badge {
+    display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:600;
+  }
+  .badge-success { background:var(--success-light); color:var(--success); }
+  .badge-warning { background:var(--warning-light); color:var(--warning); }
+  .badge-danger { background:var(--danger-light); color:var(--danger); }
+  .badge-info { background:var(--primary-light); color:var(--primary); }
+
+  /* 统计卡片 */
+  .stats-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px,1fr)); gap:12px; margin-bottom:20px; }
+  .stat-card {
+    background:var(--card-bg); border:1px solid var(--border); border-radius:8px; padding:16px; text-align:center;
+  }
+  .stat-card .number { font-size:28px; font-weight:700; margin-bottom:4px; }
+  .stat-card .label { font-size:12px; color:var(--text-light); }
+  .stat-card.primary .number { color:var(--primary); }
+  .stat-card.success .number { color:var(--success); }
+  .stat-card.warning .number { color:var(--warning); }
+  .stat-card.danger .number { color:var(--danger); }
+
+  /* Toast */
+  .toast-container { position:fixed; top:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:8px; }
+  .toast {
+    padding:12px 20px; border-radius:8px; color:#fff; font-size:13px; font-weight:500;
+    box-shadow:0 4px 12px rgba(0,0,0,.15); animation:slideIn .3s ease; max-width:400px;
+  }
+  .toast.success { background:var(--success); }
+  .toast.error { background:var(--danger); }
+  .toast.info { background:var(--primary); }
+
+  @keyframes slideIn { from { opacity:0; transform:translateX(100px); } to { opacity:1; transform:translateX(0); } }
+
+  /* 命名规则示例 */
+  .naming-examples {
+    background:#f8f9fb; border-radius:8px; padding:16px; font-family:monospace; font-size:13px;
+    line-height:2; overflow-x:auto; white-space:pre;
+  }
+
+  /* 隐藏文件input */
+  .hidden-input { display:none; }
+
+  /* 加载动画 */
+  .loading { display:inline-block; width:18px; height:18px; border:2px solid #ccc; border-top-color:var(--primary); border-radius:50%; animation:spin .6s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* 高亮卡片的框 */
+  .highlight-box {
+    border:2px solid var(--primary); background:var(--primary-light); border-radius:var(--radius);
+    padding:24px; margin-bottom:20px;
+  }
+  .highlight-box h3 { color:var(--primary); margin-bottom:12px; font-size:15px; }
+
+  @media (max-width:768px) {
+    .step-nav .step { font-size:11px; padding:10px 4px; }
+    .step-nav .step .num { width:20px; height:20px; font-size:10px; }
+    .container { padding:12px; }
+    .card-row { flex-direction:column; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">📦 埠勤商贸 · 批量图片导入</div>
+  <nav>
+    <a href="/mall/extract.html">商品录入</a>
+    <a href="/mall/images.html">图片管理</a>
+    <a href="/mall/batch-image-import.html" class="active">批量图片导入</a>
+  </nav>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="container">
+  <!-- ====== 步骤导航条 ====== -->
+  <div class="step-nav">
+    <div class="step active" onclick="switchStep(1)" data-step="1">
+      <span class="num">1</span> 准备SKU
+    </div>
+    <div class="step" onclick="switchStep(2)" data-step="2">
+      <span class="num">2</span> 准备图片
+    </div>
+    <div class="step" onclick="switchStep(3)" data-step="3">
+      <span class="num">3</span> 导入模板 & 上传图片
+    </div>
+    <div class="step" onclick="switchStep(4)" data-step="4">
+      <span class="num">4</span> 核对结果
+    </div>
+    <div class="step" onclick="switchStep(5)" data-step="5">
+      <span class="num">5</span> 结束上传
+    </div>
+  </div>
+
+  <!-- ================================================================== -->
+  <!-- 步骤1: 准备SKU -->
+  <!-- ================================================================== -->
+  <div class="card" id="step1" style="display:block;">
+    <div class="card-header">📋 步骤1：创建SKU（前提条件）</div>
+    <div class="card-body">
+      <div class="alert alert-info">
+        <b>批量导入图片前，请先确保所有SKU已在系统中创建。</b><br>
+        如果SKU尚未创建，请前往商品录入页面先完成商品信息录入。
+      </div>
+      <div class="btn-group" style="margin-top:16px;">
+        <a href="/mall/extract.html" class="btn btn-outline" target="_blank">📝 前往商品录入页面</a>
+        <span style="color:var(--text-light);font-size:13px;">（在新页签中打开）</span>
+      </div>
+      <div class="alert alert-warning" style="margin-top:16px;">
+        <b>说明：</b>批量图片导入只会为已存在的SKU绑定图片，不会创建新商品。每个SKU需填写<b>单品编码</b>（在商品录入最后一步）。
+      </div>
+      <div class="btn-group" style="margin-top:20px;">
+        <button class="btn btn-primary" onclick="switchStep(2)">下一步：准备图片 →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================== -->
+  <!-- 步骤2: 准备图片（命名规则） -->
+  <!-- ================================================================== -->
+  <div class="card" id="step2" style="display:none;">
+    <div class="card-header">🏞 步骤2：图片准备与命名规则</div>
+    <div class="card-body">
+      <div class="alert alert-info">
+        <b>重要：图片文件名必须严格遵循以下命名规则，系统才能自动匹配SKU。</b>
+      </div>
+
+      <h3 style="font-size:14px;margin-bottom:8px;">命名规则</h3>
+      <div class="naming-examples">
+{SKU}01{XX}.扩展名  →  主图     示例：<b>1520559990101</b>.jpg  （SKU=152055999，主图第1张）
+{SKU}02{XX}.扩展名  →  详情图   示例：<b>1520559990201</b>.jpg  （SKU=152055999，详情图第1张）
+{SKU}03{XX}.扩展名  →  备案截图 示例：<b>1520559990301</b>.jpg  （SKU=152055999，备案截图第1张）
+      </div>
+
+      <div style="margin-top:16px;font-size:13px;color:var(--text-light);line-height:1.8;">
+        <p>• <b>{单品编码}</b> = 商品的唯一编码（数字或字母均可）</p>
+        <p>• <b>01</b> = 主图 / <b>02</b> = 详情图 / <b>03</b> = 备案截图</p>
+        <p>• <b>{XX}</b> = 两位数字序号，从01开始递增（01, 02, 03...）</p>
+        <p>• 支持的图片格式：<b>jpg / jpeg / png / webp / gif</b></p>
+        <p>• <b>一般品类只需主图+详情图，部分品类需要备案截图</b></p>
+      </div>
+
+      <div class="btn-group" style="margin-top:20px;">
+        <button class="btn btn-outline" onclick="switchStep(1)">← 上一步</button>
+        <button class="btn btn-primary" onclick="switchStep(3)">下一步：导入模板 & 上传图片 →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================== -->
+  <!-- 步骤3: 导入模板 + 上传图片（放在一起，上传区域非常醒目） -->
+  <!-- ================================================================== -->
+  <div id="step3" style="display:none;">
+
+    <!-- ====== 3A: 导入模板 ====== -->
+    <div class="card">
+      <div class="card-header">📥 步骤3-A：下载模板 → 填入SKU → 导入创建任务</div>
+      <div class="card-body">
+        <div class="alert alert-info">
+          <b>单次建议导入50个单品左右</b>，在模板中填写序号和对应的单品编码。
+        </div>
+
+        <div class="btn-group" style="margin-bottom:20px;">
+          <button class="btn btn-outline" onclick="downloadTemplate()">📥 下载SKU导入模板（Excel）</button>
+          <span style="font-size:12px;color:var(--text-light);">→ 在下载的Excel中填入SKU后保存</span>
+        </div>
+
+        <input type="file" id="skuFileInput" class="hidden-input" accept=".xlsx,.xls,.csv" onchange="handleSkuFileSelect(event)">
+        <div class="upload-zone" onclick="document.getElementById('skuFileInput').click()" id="skuUploadZone" style="padding:24px;">
+          <div class="icon">📋</div>
+          <p>点击上传已填好的SKU模板文件</p>
+          <p style="font-size:11px;margin-top:4px;">支持 .xlsx / .xls / .csv</p>
+          <div class="file-count" id="skuFileName" style="display:none;"></div>
+        </div>
+        <div style="margin-top:12px;">
+          <label style="font-size:13px;color:var(--text-light);margin-right:8px;">任务名称（可选）：</label>
+          <input type="text" id="sessionName" placeholder="如：7月第一批图片导入" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:260px;">
+        </div>
+        <div class="btn-group" style="margin-top:12px;">
+          <button class="btn btn-primary" id="btnCreateSession" onclick="createSession()" disabled>✅ 确认导入，创建任务</button>
+          <span id="createSessionMsg" style="font-size:13px;color:var(--text-light);"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== 3B: 选择任务 ====== -->
+    <div class="card">
+      <div class="card-header">📋 现有导入任务</div>
+      <div class="card-body">
+        <div class="btn-group" style="margin-bottom:12px;">
+        <button class="btn btn-outline btn-sm" onclick="loadSessionTableStep3()">🔄 刷新任务列表</button>
+        <button class="btn btn-danger btn-sm" id="btnBatchDeleteSessions" onclick="deleteSelectedSessions()" disabled>🗑 批量删除</button>
+      </div>
+      <div id="sessionTableInStep3" style="font-size:13px;color:var(--text-light);">加载中...</div>
+      </div>
+    </div>
+
+    <!-- ====== 3C: 上传图片 — 核心功能区 ====== -->
+    <div class="highlight-box" id="uploadHighlightBox">
+      <h3>🖼 步骤3-B：批量上传图片（核心功能）</h3>
+
+      <div style="margin-bottom:16px;">
+        <label style="font-size:13px;font-weight:600;">当前任务：</label>
+        <select id="step3SessionSelect" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:350px;margin-left:8px;" onchange="onSessionSelectInStep3()">
+          <option value="">-- 请先创建任务，然后选择 --</option>
+        </select>
+        <span id="step3SessionInfo" style="margin-left:12px;font-size:12px;"></span>
+      </div>
+
+      <div class="alert alert-warning">
+        选择"批量给商品维护图片（浏览器上传）"导入方式。<br>
+        点击下方区域选择图片，或直接将图片文件/文件夹拖入。图片张数过多时，可分多次上传。
+      </div>
+
+      <!-- 上传区域——超大醒目 -->
+      <input type="file" id="imageFileInput" class="hidden-input" accept="image/*" multiple onchange="handleImageFileSelect(event)">
+      <div class="upload-zone big" id="imageUploadZone"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="handleImageDrop(event)">
+        <div class="icon">🖼</div>
+        <p style="font-size:18px;font-weight:600;color:var(--primary);">拖拽图片/文件夹到此处</p>
+        <p>或点击选择图片上传</p>
+        <p style="font-size:11px;margin-top:4px;">支持 jpg / jpeg / png / webp / gif，可多选</p>
+        <div class="file-count" id="imagePickedCount" style="display:none;"></div>
+      </div>
+
+      <div class="btn-group" style="margin-top:16px;">
+        <button class="btn btn-primary btn-lg" id="btnUploadImages" onclick="uploadImages()" disabled>
+          🚀 点击上传
+        </button>
+        <label class="btn btn-outline" style="cursor:pointer;">
+          📁 选择文件夹
+          <input type="file" class="hidden-input" accept="image/*" multiple onchange="handleImageFileSelect(event)" webkitdirectory>
+        </label>
+        <button class="btn btn-outline" onclick="document.getElementById('imageFileInput').click()">
+          🖼 选择图片
+        </button>
+        <span id="uploadMsg" style="font-size:13px;color:var(--text-light);"></span>
+      </div>
+
+      <!-- 上传结果 -->
+      <div id="uploadResult" style="margin-top:20px;display:none;"></div>
+    </div>
+
+    <div class="btn-group" style="margin-top:0;margin-bottom:20px;">
+      <button class="btn btn-outline" onclick="switchStep(2)">← 上一步</button>
+      <button class="btn btn-primary" onclick="switchStep(4)">下一步：核对匹配结果 →</button>
+    </div>
+  </div>
+
+  <!-- ================================================================== -->
+  <!-- 步骤4: 核对匹配结果 -->
+  <!-- ================================================================== -->
+  <div class="card" id="step4" style="display:none;">
+    <div class="card-header">🔍 步骤4：核对图片匹配结果</div>
+    <div class="card-body">
+      <div style="margin-bottom:16px;">
+        <label style="font-size:13px;font-weight:600;">查看任务：</label>
+        <select id="step4SessionSelect" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:350px;margin-left:8px;" onchange="loadReviewDetail()">
+          <option value="">-- 请选择任务 --</option>
+        </select>
+        <button class="btn btn-outline btn-sm" style="margin-left:8px;" onclick="loadReviewDetail()">🔄 刷新</button>
+        <button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="switchStep(3)">📤 返回补充上传</button>
+      </div>
+
+      <div class="stats-grid" id="reviewStats" style="display:none;"></div>
+      <div style="overflow-x:auto;max-height:500px;overflow-y:auto;" id="reviewDetailTable">
+        <p style="color:var(--text-light);font-size:13px;">请先选择任务查看详情</p>
+      </div>
+
+      <div class="btn-group" style="margin-top:20px;">
+        <button class="btn btn-outline" onclick="switchStep(3)">← 上一步</button>
+        <button class="btn btn-success btn-lg" id="btnFinalize" onclick="switchStep(5)" disabled>
+          ✅ 核对完毕，前往结束上传 →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================== -->
+  <!-- 步骤5: 结束上传 -->
+  <!-- ================================================================== -->
+  <div class="card" id="step5" style="display:none;">
+    <div class="card-header">🎯 步骤5：结束上传（正式绑定图片到商品）</div>
+    <div class="card-body">
+      <div style="margin-bottom:16px;">
+        <label style="font-size:13px;font-weight:600;">确认任务：</label>
+        <select id="step5SessionSelect" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:350px;margin-left:8px;" onchange="loadFinalizePreview()">
+          <option value="">-- 请选择任务 --</option>
+        </select>
+      </div>
+
+      <div id="finalizePreview" style="margin-bottom:16px;">
+        <p style="color:var(--text-light);font-size:13px;">请先选择要结束的任务</p>
+      </div>
+
+      <div class="alert alert-warning">
+        <b>⚠ 注意：</b>点击「结束上传」后，系统会将此批次上传的所有图片正式绑定到对应商品的图片库中。<br>
+        图片会按导入的名称进行<b>覆盖或新增</b>。操作不可撤销，请务必将图片数量核对无误后再操作。
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-outline" onclick="switchStep(4)">← 返回核对</button>
+        <button class="btn btn-success btn-lg" id="btnFinalizeConfirm" onclick="finalizeSession()" disabled>
+          ✔ 结束上传（正式绑定图片）
+        </button>
+        <span id="finalizeMsg" style="font-size:13px;color:var(--text-light);"></span>
+      </div>
+
+      <div id="finalizeResult" style="margin-top:20px;display:none;"></div>
+    </div>
+  </div>
+
+</div><!-- /.container -->
+
+<script>
+const API_BASE = '/api/batch-image-import';
+let currentStep = 1;
+let currentSessionId = null;
+let selectedSkuFile = null;
+let selectedImageFiles = [];
+let allSessions = [];
+
+// ==================== Toast ====================
+function showToast(msg, type) {
+  type = type || 'info';
+  const container = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = 'toast ' + type; el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => { el.style.opacity='0'; el.style.transition='.3s'; setTimeout(() => el.remove(),300); }, 3000);
+}
+
+// ==================== 步骤切换 ====================
+function switchStep(step) {
+  for (let i = 1; i <= 5; i++) {
+    const stepEl = document.getElementById('step' + i);
+    if (stepEl) stepEl.style.display = (i === step) ? 'block' : 'none';
+    const navEl = document.querySelector(`.step-nav .step[data-step="${i}"]`);
+    if (navEl) {
+      navEl.classList.remove('active');
+      if (i < step) navEl.classList.add('completed');
+      else navEl.classList.remove('completed');
+    }
+  }
+  const activeEl = document.querySelector(`.step-nav .step[data-step="${step}"]`);
+  if (activeEl) activeEl.classList.add('active');
+  currentStep = step;
+
+  if (step === 3) { refreshSessionSelects(); loadSessionTableStep3(); }
+  if (step === 4) refreshSessionSelects();
+  if (step === 5) refreshSessionSelects();
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function markStepCompleted(step) {
+  const el = document.querySelector(`.step-nav .step[data-step="${step}"]`);
+  if (el) el.classList.add('completed');
+}
+
+// ==================== 模板 ====================
+function downloadTemplate() {
+  window.open(API_BASE + '/template', '_blank');
+}
+
+function handleSkuFileSelect(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  selectedSkuFile = file;
+  document.getElementById('skuFileName').style.display = 'block';
+  document.getElementById('skuFileName').textContent = '✅ 已选择: ' + file.name;
+  document.getElementById('btnCreateSession').disabled = false;
+}
+
+// ==================== 创建任务 ====================
+async function createSession() {
+  if (!selectedSkuFile) { showToast('请先选择SKU模板文件', 'error'); return; }
+  const btn = document.getElementById('btnCreateSession');
+  const msgEl = document.getElementById('createSessionMsg');
+  btn.disabled = true;
+  msgEl.textContent = '创建中...';
+
+  try {
+    const formData = new FormData();
+    formData.append('file', selectedSkuFile);
+    const name = document.getElementById('sessionName').value.trim();
+    if (name) formData.append('name', name);
+
+    const resp = await fetch(API_BASE + '/sessions', { method: 'POST', body: formData });
+    const result = await resp.json();
+
+    if (result.success) {
+      currentSessionId = result.data.id;
+      msgEl.textContent = `✅ 任务创建成功！ID: #${result.data.id}，共 ${result.data.skuCount} 个SKU`;
+      showToast(`任务 #${result.data.id} 创建成功`, 'success');
+      markStepCompleted(3);
+
+      selectedSkuFile = null;
+      document.getElementById('skuFileInput').value = '';
+      document.getElementById('skuFileName').style.display = 'none';
+      document.getElementById('btnCreateSession').disabled = true;
+
+      await loadSessions();
+      // 自动选中刚刚创建的任务
+      const sel = document.getElementById('step3SessionSelect');
+      if (sel) sel.value = result.data.id;
+      onSessionSelectInStep3();
+    } else {
+      msgEl.textContent = '❌ ' + (result.error || '创建失败');
+      showToast(result.error || '创建失败', 'error');
+    }
+  } catch (err) {
+    msgEl.textContent = '❌ 网络错误: ' + err.message;
+    showToast('创建失败: ' + err.message, 'error');
+  } finally {
+    btn.disabled = !selectedSkuFile;
+  }
+}
+
+// ==================== 加载任务列表 ====================
+async function loadSessions() {
+  try {
+    const resp = await fetch(API_BASE + '/sessions');
+    const result = await resp.json();
+    allSessions = result.data || [];
+    refreshSessionSelects();
+    return allSessions;
+  } catch (err) {
+    console.error('loadSessions error', err);
+    return [];
+  }
+}
+
+function loadSessionTableStep3() {
+  const el = document.getElementById('sessionTableInStep3');
+  if (!el) return;
+
+  (async () => {
+    await loadSessions();
+    if (allSessions.length === 0) {
+      el.innerHTML = '<p>暂无导入任务，请先上传SKU模板创建任务</p>';
+      return;
+    }
+
+    el.innerHTML = '<table class="data-table"><thead><tr><th style="width:40px;"><input type="checkbox" id="selectAllSessions" onclick="toggleSelectAllSessions(this)" title="全选"></th><th>任务ID</th><th>名称</th><th>SKU数</th><th>状态</th><th>图片数</th><th>创建时间</th><th>操作</th></tr></thead><tbody>'
+      + allSessions.map(s => {
+        const st = s.stats || {};
+        const totalImgs = (st.total_main||0)+(st.total_detail||0)+(st.total_screenshot||0);
+        const statusBadge = s.status === 'completed' ? '<span class="badge badge-success">已完成</span>'
+          : s.status === 'uploading' ? '<span class="badge badge-info">上传中</span>'
+          : '<span class="badge badge-warning">待上传</span>';
+        return `<tr>
+          <td><input type="checkbox" class="session-checkbox" value="${s.id}" onclick="updateBatchDeleteButton()"></td>
+          <td><b>#${s.id}</b></td>
+          <td>${escapeHtml(s.name||'—')}</td>
+          <td>${s.sku_count}</td>
+          <td>${statusBadge}</td>
+          <td>${totalImgs}</td>
+          <td style="font-size:11px;">${s.created_at||''}</td>
+          <td>
+            <button class="btn btn-primary btn-sm" onclick="selectTaskForUpload(${s.id})" ${s.status==='completed'?'disabled':''}>📤 上传图片</button>
+            <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteSession(${s.id})" title="删除任务">🗑</button>
+          </td>
+        </tr>`;
+      }).join('')
+      + '</tbody></table>';
+    updateBatchDeleteButton();
+  })();
+}
+
+function selectTaskForUpload(id) {
+  currentSessionId = id;
+  const sel = document.getElementById('step3SessionSelect');
+  if (sel) sel.value = id;
+  onSessionSelectInStep3();
+  // 滚动到上传区域
+  document.getElementById('uploadHighlightBox').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function deleteSession(id) {
+  if (!confirm('确认删除任务 #' + id + ' ？已上传的图片将被清除。')) return;
+  try {
+    const resp = await fetch(API_BASE + '/sessions/' + id, { method: 'DELETE' });
+    const result = await resp.json();
+    if (result.success) {
+      showToast('任务 #' + id + ' 已删除', 'success');
+      loadSessionTableStep3();
+      refreshSessionSelects();
+    } else {
+      showToast(result.error, 'error');
+    }
+  } catch (err) {
+    showToast('删除失败: ' + err.message, 'error');
+  }
+}
+
+function getSelectedSessionIds() {
+  return Array.from(document.querySelectorAll('.session-checkbox:checked')).map(cb => cb.value);
+}
+
+function updateBatchDeleteButton() {
+  const btn = document.getElementById('btnBatchDeleteSessions');
+  const ids = getSelectedSessionIds();
+  if (btn) btn.disabled = ids.length === 0;
+}
+
+function toggleSelectAllSessions(checkbox) {
+  const checked = checkbox.checked;
+  document.querySelectorAll('.session-checkbox').forEach(cb => { cb.checked = checked; });
+  updateBatchDeleteButton();
+}
+
+async function deleteSelectedSessions() {
+  const ids = getSelectedSessionIds();
+  if (ids.length === 0) return;
+  if (!confirm(`确认批量删除选中的 ${ids.length} 个任务？已上传的图片将被清除。`)) return;
+  try {
+    const resp = await fetch(API_BASE + '/sessions', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids })
+    });
+    const result = await resp.json();
+    if (result.success) {
+      showToast(`已删除 ${result.deleted || ids.length} 个任务`, 'success');
+      loadSessionTableStep3();
+      refreshSessionSelects();
+    } else {
+      showToast(result.error, 'error');
+    }
+  } catch (err) {
+    showToast('批量删除失败: ' + err.message, 'error');
+  }
+}
+
+function refreshSessionSelects() {
+  const selects = ['step3SessionSelect', 'step4SessionSelect', 'step5SessionSelect'];
+  selects.forEach(sid => {
+    const sel = document.getElementById(sid);
+    if (!sel) return;
+    const prevVal = sel.value;
+    sel.innerHTML = '<option value="">-- 请选择任务 --</option>'
+      + allSessions.map(s => {
+        const label = s.status === 'completed' ? ' [已完成]' : '';
+        return `<option value="${s.id}" ${s.id==currentSessionId?'selected':''}>#${s.id} - ${escapeHtml(s.name||'未命名')} (${s.sku_count} SKU)${label}</option>`;
+      }).join('');
+    if (prevVal) sel.value = prevVal;
+  });
+}
+
+// ==================== 步骤3: 图片上传 ====================
+function onSessionSelectInStep3() {
+  const sid = document.getElementById('step3SessionSelect').value;
+  const infoEl = document.getElementById('step3SessionInfo');
+  const btn = document.getElementById('btnUploadImages');
+  if (!sid) {
+    currentSessionId = null;
+    infoEl.innerHTML = '';
+    btn.disabled = true;
+    return;
+  }
+  currentSessionId = parseInt(sid);
+  loadCurrentSessionInfo();
+}
+
+async function loadCurrentSessionInfo() {
+  if (!currentSessionId) return;
+  try {
+    const resp = await fetch(API_BASE + '/sessions/' + currentSessionId);
+    const result = await resp.json();
+    if (result.success) {
+      const d = result.data;
+      const st = d.stats || {};
+      const totalImgs = (st.total_main||0)+(st.total_detail||0)+(st.total_screenshot||0);
+      document.getElementById('step3SessionInfo').innerHTML =
+        `<span class="badge badge-info">${st.total} SKU</span>
+         <span style="margin-left:4px;">已传图片: <b>${totalImgs}</b> 张</span>`;
+      document.getElementById('btnUploadImages').disabled = (d.session.status === 'completed');
+    }
+  } catch (err) { /* ignore */ }
+}
+
+function handleImageFileSelect(e) {
+  const files = Array.from(e.target.files);
+  if (files.length === 0) return;
+  selectedImageFiles = files;
+  updateImagePickedCount();
+}
+
+function handleImageDrop(e) {
+  e.preventDefault();
+  e.target.classList.remove('drag-over');
+  const items = e.dataTransfer.items;
+  const files = [];
+  function processEntry(entry) {
+    if (entry.isFile) {
+      entry.file(f => files.push(f));
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      reader.readEntries(entries => entries.forEach(processEntry));
+    }
+  }
+  for (const item of items) {
+    if (item.kind === 'file') {
+      const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+      if (entry) {
+        processEntry(entry);
+      } else {
+        files.push(item.getAsFile());
+      }
+    }
+  }
+  setTimeout(() => {
+    selectedImageFiles = files;
+    updateImagePickedCount();
+  }, 500);
+}
+
+function updateImagePickedCount() {
+  const el = document.getElementById('imagePickedCount');
+  const btn = document.getElementById('btnUploadImages');
+  if (selectedImageFiles.length > 0) {
+    el.style.display = 'block';
+    el.textContent = `已选择 ${selectedImageFiles.length} 个图片文件`;
+    btn.disabled = !currentSessionId;
+  } else {
+    el.style.display = 'none';
+    btn.disabled = true;
+  }
+}
+
+async function uploadImages() {
+  if (!currentSessionId) { showToast('请先在上方选择导入任务', 'error'); return; }
+  if (selectedImageFiles.length === 0) { showToast('请先选择图片文件', 'error'); return; }
+
+  const btn = document.getElementById('btnUploadImages');
+  const msgEl = document.getElementById('uploadMsg');
+  btn.disabled = true;
+  msgEl.textContent = `上传 ${selectedImageFiles.length} 张图片中...`;
+
+  try {
+    const formData = new FormData();
+    selectedImageFiles.forEach(f => formData.append('images', f));
+
+    const resp = await fetch(API_BASE + '/sessions/' + currentSessionId + '/upload', {
+      method: 'POST', body: formData,
+    });
+    const result = await resp.json();
+
+    if (result.success) {
+      const d = result.data;
+      showToast(`上传完成：${d.matched} 张匹配, ${d.unmatched} 张未匹配`, 'success');
+      msgEl.textContent = `✅ 上传完成！匹配 ${d.matched} 张，未匹配 ${d.unmatched} 张`;
+
+      let resultHtml = '';
+      if (d.skipped && d.skipped.length > 0) {
+        resultHtml += '<div class="alert alert-warning" style="margin-top:12px;"><b>⚠ 以下文件未匹配：</b><br>'
+          + d.skipped.map(s => `• ${escapeHtml(s.filename)} — ${s.reason}`).join('<br>')
+          + '</div>';
+      }
+      const resultEl = document.getElementById('uploadResult');
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = resultHtml;
+
+      markStepCompleted(3);
+
+      selectedImageFiles = [];
+      document.getElementById('imageFileInput').value = '';
+      updateImagePickedCount();
+
+      loadSessionTableStep3();
+      loadCurrentSessionInfo();
+    } else {
+      msgEl.textContent = '❌ ' + (result.error || '上传失败');
+      showToast(result.error || '上传失败', 'error');
+    }
+  } catch (err) {
+    msgEl.textContent = '❌ 网络错误: ' + err.message;
+    showToast('上传失败: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ==================== 步骤4: 核对匹配结果 ====================
+let reviewProductsCache = [];
+
+async function loadReviewDetail() {
+  const sid = document.getElementById('step4SessionSelect').value;
+  if (!sid) return;
+
+  try {
+    const [sessionResp, productsResp] = await Promise.all([
+      fetch(API_BASE + '/sessions/' + sid),
+      fetch('/api/products?pageSize=10000&status=all')
+    ]);
+    const result = await sessionResp.json();
+    if (!result.success) { showToast(result.error, 'error'); return; }
+
+    const productsResult = await productsResp.json();
+    reviewProductsCache = (productsResult.data && productsResult.data.items) || [];
+
+    const d = result.data;
+    const st = d.stats;
+    const imgTotal = st.totalMain + st.totalDetail + st.totalScreenshot;
+
+    document.getElementById('reviewStats').style.display = 'grid';
+    document.getElementById('reviewStats').innerHTML = `
+      <div class="stat-card primary"><div class="number">${st.total}</div><div class="label">SKU总数</div></div>
+      <div class="stat-card success"><div class="number">${st.matched}</div><div class="label">完整匹配</div></div>
+      <div class="stat-card warning"><div class="number">${st.partial}</div><div class="label">部分匹配</div></div>
+      <div class="stat-card danger"><div class="number">${st.unmatched}</div><div class="label">未匹配</div></div>
+      <div class="stat-card"><div class="number">${imgTotal}</div><div class="label">图片总数</div></div>
+    `;
+
+    const productOptions = reviewProductsCache.map(p => `<option value="${p.id}">[${escapeHtml(p.product_code||p.id)}] ${escapeHtml(p.display_name||p.name||'未命名')}</option>`).join('');
+
+    let tableHtml = '<table class="data-table"><thead><tr><th>序号</th><th>单品编码</th><th>商品名称</th><th>主图</th><th>详情图</th><th>备案截图</th><th>合计</th><th>状态</th><th>操作</th></tr></thead><tbody>';
+    d.skus.forEach(s => {
+      const total = (s.main_count||0)+(s.detail_count||0)+(s.screenshot_count||0);
+      const statusBadge = s.status === 'matched' ? '<span class="badge badge-success">✅ 完整</span>'
+        : s.status === 'partial' ? '<span class="badge badge-warning">⚠ 部分</span>'
+        : (s.product_id ? '<span class="badge badge-warning">⏳ 待传</span>' : '<span class="badge badge-danger">❌ 未匹配</span>');
+      let actionCell = '—';
+      if (!s.product_id) {
+        actionCell = `<select id="bind-sel-${s.id}" style="padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;max-width:160px;"><option value="">选择商品</option>${productOptions}</select>
+          <button class="btn btn-primary btn-sm" onclick="bindSkuToProduct(${s.session_id}, '${escapeHtml(s.sku_code)}', ${s.id})" style="margin-left:4px;padding:4px 8px;font-size:12px;">绑定</button>`;
+      }
+      tableHtml += `<tr>
+        <td>${s.seq}</td>
+        <td><b>${escapeHtml(s.sku_code)}</b></td>
+        <td>${escapeHtml(s.product_name||(s.product_id?'商品#'+s.product_id:'—'))}</td>
+        <td class="${s.main_count>0?'':'zero'}">${s.main_count||0}</td>
+        <td class="${s.detail_count>0?'':'zero'}">${s.detail_count||0}</td>
+        <td class="${s.screenshot_count>0?'':'zero'}">${s.screenshot_count||0}</td>
+        <td><b>${total}</b></td>
+        <td>${statusBadge}</td>
+        <td>${actionCell}</td>
+      </tr>`;
+    });
+    tableHtml += '</tbody></table>';
+
+    if (d.imageFiles && d.imageFiles.length > 0) {
+      tableHtml += '<div style="margin-top:16px;"><h3 style="font-size:13px;margin-bottom:8px;">📁 已上传图片文件 (' + d.imageFiles.length + ' 张)</h3>';
+      tableHtml += '<table class="data-table"><thead><tr><th>文件名</th><th>SKU</th><th>类型</th><th>序号</th><th>大小</th></tr></thead><tbody>';
+      d.imageFiles.forEach(f => {
+        const p = f.parsed;
+        const typeLabel = p && p.imgType === 'main' ? '主图' : p && p.imgType === 'detail' ? '详情图' : p && p.imgType === 'screenshot' ? '备案截图' : '未知';
+        const typeCls = p && p.imgType === 'main' ? 'badge-info' : p && p.imgType === 'detail' ? 'badge-success' : p && p.imgType === 'screenshot' ? 'badge-warning' : '';
+        tableHtml += `<tr>
+          <td style="font-family:monospace;font-size:12px;">${escapeHtml(f.filename)}</td>
+          <td>${p ? escapeHtml(p.skuCode) : '—'}</td>
+          <td>${p ? '<span class="badge '+typeCls+'">'+typeLabel+'</span>' : '—'}</td>
+          <td>${p ? p.seq : '—'}</td>
+          <td style="font-size:11px;color:var(--text-light);">${formatSize(f.size)}</td>
+        </tr>`;
+      });
+      tableHtml += '</tbody></table></div>';
+    }
+
+    document.getElementById('reviewDetailTable').innerHTML = tableHtml;
+    document.getElementById('btnFinalize').disabled = !(st.matched > 0 || st.partial > 0);
+
+    currentSessionId = parseInt(sid);
+  } catch (err) {
+    document.getElementById('reviewDetailTable').innerHTML = '<p style="color:red;">加载失败: ' + err.message + '</p>';
+  }
+}
+
+async function bindSkuToProduct(sessionId, skuCode, skuRowId) {
+  const sel = document.getElementById('bind-sel-' + skuRowId);
+  if (!sel || !sel.value) { showToast('请先选择要绑定的商品', 'error'); return; }
+
+  try {
+    const resp = await fetch(`${API_BASE}/sessions/${sessionId}/skus/${encodeURIComponent(skuCode)}/bind`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_id: parseInt(sel.value, 10) })
+    });
+    const result = await resp.json();
+    if (result.success) {
+      showToast(`SKU ${skuCode} 已绑定到 ${result.data.product_name}`, 'success');
+      loadReviewDetail();
+    } else {
+      showToast(result.error || '绑定失败', 'error');
+    }
+  } catch (err) {
+    showToast('绑定失败: ' + err.message, 'error');
+  }
+}
+
+// ==================== 步骤5: 结束上传 ====================
+async function loadFinalizePreview() {
+  const sid = document.getElementById('step5SessionSelect').value;
+  if (!sid) { document.getElementById('btnFinalizeConfirm').disabled = true; return; }
+
+  currentSessionId = parseInt(sid);
+  try {
+    const resp = await fetch(API_BASE + '/sessions/' + sid);
+    const result = await resp.json();
+    if (!result.success) { showToast(result.error, 'error'); return; }
+
+    const d = result.data;
+    const st = d.stats;
+    const imgTotal = st.totalMain + st.totalDetail + st.totalScreenshot;
+
+    document.getElementById('finalizePreview').innerHTML = `
+      <div class="stats-grid">
+        <div class="stat-card"><div class="number">${st.total}</div><div class="label">SKU总数</div></div>
+        <div class="stat-card success"><div class="number">${st.matched+st.partial}</div><div class="label">已匹配SKU</div></div>
+        <div class="stat-card primary"><div class="number">${imgTotal}</div><div class="label">图片总数</div></div>
+        <div class="stat-card"><div class="number">${d.imageCount}</div><div class="label">待绑定文件</div></div>
+      </div>
+      <p style="font-size:13px;color:var(--text-light);margin-top:8px;">
+        主图 ${st.totalMain} 张 · 详情图 ${st.totalDetail} 张 · 备案截图 ${st.totalScreenshot} 张
+      </p>
+    `;
+
+    document.getElementById('btnFinalizeConfirm').disabled = d.session.status === 'completed';
+    if (d.session.status === 'completed') {
+      document.getElementById('finalizeMsg').textContent = '✅ 此任务已完成';
+    } else {
+      document.getElementById('finalizeMsg').textContent = '';
+    }
+  } catch (err) {
+    document.getElementById('finalizePreview').innerHTML = '<p style="color:red;">加载失败</p>';
+  }
+}
+
+async function finalizeSession() {
+  if (!currentSessionId) { showToast('请先选择任务', 'error'); return; }
+  if (!confirm('确认结束上传？系统将正式把图片绑定到商品。此操作不可撤销。')) return;
+
+  const btn = document.getElementById('btnFinalizeConfirm');
+  const msgEl = document.getElementById('finalizeMsg');
+  btn.disabled = true;
+  msgEl.textContent = '绑定中...';
+
+  try {
+    const resp = await fetch(API_BASE + '/sessions/' + currentSessionId + '/finalize', { method: 'POST' });
+    const result = await resp.json();
+
+    const resultEl = document.getElementById('finalizeResult');
+    resultEl.style.display = 'block';
+
+    if (result.success) {
+      const d = result.data;
+      let html = `<div class="alert alert-success">✅ 图片绑定完成！共成功绑定 <b>${d.bound}</b> 张图片到商品。</div>`;
+      if (d.skipped && d.skipped.length > 0) {
+        html += `<div class="alert alert-warning">⚠ ${d.skipped.length} 张图片未绑定：<br>`
+          + d.skipped.map(s => `• ${escapeHtml(s.filename)} — ${s.reason}`).join('<br>') + '</div>';
+      }
+      if (d.errors && d.errors.length > 0) {
+        html += `<div class="alert alert-danger">❌ ${d.errors.length} 个错误：<br>`
+          + d.errors.map(e => `• ${e.productId}: ${e.error}`).join('<br>') + '</div>';
+      }
+      resultEl.innerHTML = html;
+      msgEl.textContent = '✅ 已完成';
+      markStepCompleted(5);
+      showToast(`图片绑定完成！${d.bound} 张图片已绑定`, 'success');
+      loadSessions();
+    } else {
+      resultEl.innerHTML = `<div class="alert alert-danger">❌ ${result.error}</div>`;
+      msgEl.textContent = '❌ 失败';
+      showToast(result.error, 'error');
+    }
+  } catch (err) {
+    document.getElementById('finalizeResult').style.display = 'block';
+    document.getElementById('finalizeResult').innerHTML = `<div class="alert alert-danger">❌ 网络错误: ${err.message}</div>`;
+    msgEl.textContent = '❌ 网络错误';
+    showToast('操作失败', 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ==================== 辅助函数 ====================
+function escapeHtml(str) {
+  if (!str) return '';
+  const el = document.createElement('span');
+  el.textContent = str;
+  return el.innerHTML;
+}
+
+function formatSize(bytes) {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/(1024*1024)).toFixed(1) + ' MB';
+}
+
+// 上传区域点击
+document.getElementById('imageUploadZone').addEventListener('click', () => {
+  document.getElementById('imageFileInput').click();
+});
+
+// 页面初始化
+(function init() {
+  loadSessions();
+  refreshSessionSelects();
+})();
+</script>
+</body>
+</html>

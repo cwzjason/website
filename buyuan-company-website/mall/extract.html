@@ -1,0 +1,2128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="no-referrer">
+  <title>商品录入</title>
+  <style>
+    :root {
+      --primary: #1e293b;
+      --primary-hover: #0f172a;
+      --danger: #d93025;
+      --success: #188038;
+      --bg: #f8f9fa;
+      --card-bg: #ffffff;
+      --border: #dadce0;
+      --text: #202124;
+      --text-secondary: #5f6368;
+      --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+      --radius: 8px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #1a73e8 0%, #4285f4 100%);
+      color: white;
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.12);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header h1 { font-size: 18px; font-weight: 600; }
+    .header-right { display: flex; gap: 12px; align-items: center; }
+    .header .product-count {
+      background: rgba(255,255,255,0.2);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+    }
+
+    /* iframe 嵌入模式：隐藏独立页面页头 */
+    body.iframe-mode .header { display: none; }
+    body.iframe-mode .container { padding-top: 0; }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px 24px;
+    }
+
+    /* ====== Card ====== */
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+    .card-header {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      font-size: 15px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card-body { padding: 24px; }
+
+    /* ====== Upload Area ====== */
+    .upload-zone {
+      border: 2px dashed #c4c7cc;
+      border-radius: var(--radius);
+      padding: 40px;
+      text-align: center;
+      transition: all 0.25s;
+      cursor: pointer;
+      background: #fafafa;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--primary);
+      background: #f1f5f9;
+    }
+    .upload-zone .icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+      color: var(--text-secondary);
+    }
+    .upload-zone .text {
+      font-size: 15px;
+      color: var(--text-secondary);
+    }
+    .upload-zone .hint {
+      font-size: 12px;
+      color: #9aa0a6;
+      margin-top: 8px;
+    }
+
+    /* ====== Tabs ====== */
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 2px solid #e5e7eb;
+      margin-bottom: 24px;
+    }
+    .tabs .tab-btn {
+      padding: 12px 28px;
+      border: none;
+      background: none;
+      font-size: 15px;
+      font-weight: 500;
+      color: #6b7280;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.2s;
+    }
+    .tabs .tab-btn:hover { color: var(--primary); }
+    .tabs .tab-btn.active {
+      color: var(--primary);
+    }
+    .tabs .tab-btn.active::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--primary);
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ====== Buttons ====== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 18px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-light {
+      background: white;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-light:hover { background: #f1f5f9; }
+    .btn-outline {
+      background: white;
+      color: var(--primary);
+      border: 1px solid var(--primary);
+    }
+    .btn-outline:hover { background: #f1f5f9; }
+    .btn-success {
+      background: var(--success);
+      color: white;
+    }
+    .btn-success:hover { background: #146a2e; }
+    .btn-danger {
+      background: var(--danger);
+      color: white;
+    }
+    .btn-danger:hover { background: #b3261e; }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+    .btn-group { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+    /* ====== Table ====== */
+    .table-wrapper {
+      overflow-x: auto;
+      max-height: 60vh;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      min-width: max-content;
+    }
+    table thead {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    /* 预览表格：根据内容自然宽度，避免强制横向滚动 */
+    .preview-table {
+      min-width: 100%;
+      table-layout: auto;
+    }
+    .preview-table th {
+      background: #f1f5f9;
+      color: var(--primary);
+      font-weight: 600;
+    }
+    .preview-table td {
+      text-align: center;
+      padding: 6px 8px;
+    }
+    table th {
+      background: #f1f3f4;
+      color: var(--text-secondary);
+      font-weight: 600;
+      text-align: center;
+      padding: 8px 6px;
+      border-bottom: 2px solid var(--border);
+      white-space: nowrap;
+      font-size: 12px;
+      min-width: 90px;
+    }
+    table th.col-name { min-width: 140px; }
+    table th.col-url { min-width: 160px; }
+    table th.col-img { min-width: 110px; }
+    table th.col-long { min-width: 100px; }
+    /* Preview image thumbnails */
+    .cell-img-td {
+      text-align: center;
+      vertical-align: middle;
+      padding: 2px !important;
+    }
+    img.img-thumb {
+      width: 60px;
+      height: 60px;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1px solid #e0e0e0;
+    }
+    /* 导入结果摘要面板 */
+    .import-summary-table {
+      width: 100%;
+      font-size: 11px;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+    .import-summary-table th {
+      background: #d5f5e3;
+      padding: 5px 8px;
+      border: 1px solid #a9dfbf;
+      font-size: 11px;
+      min-width: auto;
+    }
+    .import-summary-table td {
+      padding: 4px 8px;
+      border: 1px solid #d5f5e3;
+      text-align: left;
+    }
+    .match-preview-table {
+      width: 100%;
+      font-size: 11px;
+      border-collapse: collapse;
+    }
+    .match-preview-table th {
+      padding: 5px 8px;
+      border: 1px solid #ddd;
+      text-align: left;
+      font-size: 11px;
+      min-width: auto;
+    }
+    .match-preview-table td {
+      padding: 4px 8px;
+      border: 1px solid #eee;
+      text-align: left;
+    }
+    .cell-img-td .img-thumb {
+      display: block;
+      margin: 0 auto 2px;
+      background: #f5f5f5;
+    }
+    .cell-input-img {
+      font-size: 10px !important;
+      padding: 2px 4px !important;
+      color: #9aa0a6;
+      text-align: center !important;
+    }
+    /* Embedded image column */
+    table th.col-embedded { min-width: 80px; }
+    .cell-embedded-td {
+      text-align: center;
+      vertical-align: middle;
+      padding: 2px !important;
+      white-space: nowrap;
+    }
+    img.img-embedded-thumb {
+      width: 44px;
+      height: 44px;
+      object-fit: cover;
+      border-radius: 3px;
+      border: 1px solid #e0e0e0;
+      margin: 1px;
+      background: #f5f5f5;
+      display: inline-block;
+    }
+    table td {
+      padding: 4px 2px;
+      border-bottom: 1px solid #e8eaed;
+      vertical-align: top;
+    }
+    table td input, table td .cell-input {
+      width: 100%;
+      border: 1px solid transparent;
+      background: transparent;
+      padding: 4px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+      transition: all 0.15s;
+      text-align: center;
+    }
+    table td input:hover { border-color: #c4c7cc; background: #fafafa; }
+    table td input:focus {
+      border-color: var(--primary);
+      background: #f1f5f9;
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.08);
+    }
+    table tr:hover { background: #f8f9ff; }
+    table tr.row-valid { background: #f0fff0; }
+    table tr.row-invalid { background: #fff5f5; }
+    table tr.row-invalid td:first-child::before {
+      content: "⚠️ ";
+      color: var(--danger);
+      font-size: 12px;
+    }
+
+    /* ====== Form Grid ====== */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 14px;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .form-group label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .form-group input, .form-group select, .form-group textarea {
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(0,0,0,0.05);
+    }
+    .form-full { grid-column: 1 / -1; }
+
+    /* ====== Status ====== */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .progress-bar {
+      flex: 1;
+      height: 4px;
+      background: #e8eaed;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-bar .fill {
+      height: 100%;
+      background: var(--primary);
+      transition: width 0.3s ease;
+    }
+    .toast {
+      position: fixed;
+      top: 72px;
+      right: 24px;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      color: white;
+      z-index: 2000;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      animation: slideIn 0.3s ease;
+      max-width: 420px;
+    }
+    .toast-success { background: var(--success); }
+    .toast-error { background: var(--danger); }
+    .toast-info { background: var(--primary); }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(100px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    /* ====== 批量图片导入 Tab 样式 ====== */
+    .highlight-box {
+      border: 2px solid var(--primary); background: #f1f5f9; border-radius: var(--radius);
+      padding: 20px; margin-bottom: 16px;
+    }
+    .highlight-box h3 { color: var(--primary); margin-bottom: 12px; font-size: 15px; }
+    .naming-examples {
+      background: #f8f9fb; border-radius: 6px; padding: 14px; font-family: monospace;
+      font-size: 12px; line-height: 2; overflow-x: auto; white-space: pre;
+    }
+    .batch-stats-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(110px,1fr)); gap: 10px; margin-bottom: 16px;
+    }
+    .batch-stat-card {
+      background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 14px; text-align: center;
+    }
+    .batch-stat-card .num { font-size: 24px; font-weight: 700; }
+    .batch-stat-card .lbl { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+    .batch-stat-card.pri .num { color: var(--primary); }
+    .batch-stat-card.suc .num { color: var(--success); }
+    .batch-stat-card.wrn .num { color: #f39c12; }
+    .batch-stat-card.dgr .num { color: var(--danger); }
+    .batch-upload-zone {
+      border: 2px dashed #c4c7cc; border-radius: var(--radius); padding: 36px 24px;
+      text-align: center; cursor: pointer; transition: .25s; background: #fafafa; min-height: 140px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .batch-upload-zone:hover, .batch-upload-zone.drag-over {
+      border-color: var(--primary); background: #f1f5f9;
+    }
+    .batch-upload-zone .icon { font-size: 40px; margin-bottom: 8px; }
+    .batch-upload-zone .picked-info { margin-top: 6px; font-size: 12px; color: var(--primary); font-weight: 600; }
+    .session-tbl { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+    .session-tbl th { background: #f8f9fb; padding: 8px 10px; text-align: left; font-weight: 600; border-bottom: 2px solid var(--border); font-size: 11px; }
+    .session-tbl td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+
+    /* ====== Image Gallery ====== */
+    .image-section { margin-bottom: 24px; }
+    .image-section-title {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .image-section-title span:first-child {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .image-section-title .hint {
+      font-size: 12px;
+      color: #9aa0a6;
+    }
+    .image-section-title .hint a {
+      color: var(--primary);
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .image-gallery {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .image-item {
+      position: relative;
+      width: 110px;
+      height: 110px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      user-select: none;
+    }
+    .image-item img {
+      width: 100%;
+      height: 84px;
+      object-fit: cover;
+      cursor: grab;
+    }
+    .image-item img:active { cursor: grabbing; }
+    .image-item .image-check {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      z-index: 2;
+    }
+    .image-item .image-actions {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      background: rgba(248,249,250,0.95);
+      border-top: 1px solid var(--border);
+    }
+    .image-item .image-actions button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 6px;
+      color: var(--text-secondary);
+      transition: color 0.2s;
+    }
+    .image-item .image-actions button:hover { color: var(--primary); }
+    .image-item .image-actions button.delete:hover { color: var(--danger); }
+    .image-item.add-item {
+      border-style: dashed;
+      background: #fafafa;
+      cursor: pointer;
+      color: #9aa0a6;
+      font-size: 32px;
+      transition: all 0.2s;
+    }
+    .image-item.add-item:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+      background: #f1f5f9;
+    }
+    .image-item.drag-over { border-color: var(--primary); background: #f1f5f9; transform: scale(1.03); }
+
+    .gallery-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+      align-items: center;
+    }
+    .gallery-actions label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* ====== Modal Preview ====== */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 3000;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-content {
+      position: relative;
+      max-width: 90vw;
+      max-height: 90vh;
+    }
+    .modal-content img {
+      max-width: 90vw;
+      max-height: 90vh;
+      border-radius: 8px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+    .modal-close {
+      position: absolute;
+      top: -40px;
+      right: 0;
+      color: white;
+      font-size: 28px;
+      cursor: pointer;
+    }
+
+    /* ====== Collapsible ====== */
+    .collapse-toggle {
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .collapse-toggle .arrow {
+      transition: transform 0.2s;
+      font-size: 12px;
+    }
+    .collapse-toggle.open .arrow { transform: rotate(90deg); }
+    .collapse-content { display: none; }
+    .collapse-content.open { display: block; }
+
+    /* ====== Product List ====== */
+    .product-list-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      min-width: 1200px;
+    }
+    .product-list-table th {
+      background: #f1f3f4;
+      padding: 10px 8px;
+      text-align: left;
+      font-size: 12px;
+      color: var(--text-secondary);
+      border-bottom: 2px solid var(--border);
+    }
+    .product-list-table td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #e8eaed;
+    }
+    .product-list-table tr:hover { background: #f8f9ff; }
+    .product-list-table .img-thumb {
+      width: 48px; height: 48px;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    /* ====== Loading ====== */
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(255,255,255,0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      display: none;
+    }
+    .loading-overlay.active { display: flex; }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-secondary);
+    }
+    .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+
+    /* ====== 可编辑表格 ====== */
+    .editable-table-wrapper { background: #fff; }
+    .editable-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: auto; }
+    .editable-table thead { position: sticky; top: 0; z-index: 2; }
+    .editable-table th {
+      background: #f1f5f9;
+      color: var(--text);
+      padding: 8px 10px;
+      font-weight: 600;
+      white-space: nowrap;
+      text-align: left;
+      border-right: 1px solid #e5e7eb;
+      border-bottom: 2px solid #e5e7eb;
+      min-width: 100px;
+    }
+    .editable-table th:last-child { border-right: none; min-width: 60px; }
+    .editable-table td {
+      padding: 4px 6px;
+      border-bottom: 1px solid #e8e8e8;
+      border-right: 1px solid #f0f0f0;
+      vertical-align: middle;
+    }
+    .editable-table td:last-child { border-right: none; }
+    .editable-table input.editable-cell {
+      width: 100%;
+      border: 1px solid transparent;
+      padding: 5px 6px;
+      font-size: 12px;
+      font-family: inherit;
+      background: transparent;
+      border-radius: 3px;
+      transition: border-color 0.15s, background 0.15s;
+      box-sizing: border-box;
+      min-width: 90px;
+    }
+    .editable-table input.editable-cell:hover {
+      border-color: #d0d0d0;
+      background: #fafafa;
+    }
+    .editable-table input.editable-cell:focus {
+      outline: none;
+      border-color: #94a3b8;
+      background: #fff;
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.05);
+    }
+    .editable-table .row-num {
+      text-align: center;
+      font-weight: 500;
+      color: #9ca3af;
+      font-size: 11px;
+      min-width: 36px;
+      width: 36px;
+      padding: 4px 2px;
+    }
+    .editable-table .del-btn {
+      background: none;
+      border: none;
+      color: #e74c3c;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      transition: background 0.15s;
+    }
+    .editable-table .del-btn:hover { background: #fde8e8; }
+    .editable-table tbody tr:hover td { background: #f1f5f9; }
+    .editable-table tbody tr:hover .row-num { color: #64748b; }
+  </style>
+  <script src="https://cdn.bootcdn.net/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <h1>📦 商品录入</h1>
+  <div class="header-right">
+    <a href="/mall/admin.html" style="color:white;text-decoration:none;margin-right:12px;font-size:13px;padding:4px 10px;background:rgba(255,255,255,0.15);border-radius:4px;">📋 商品管理</a>
+    <a href="/mall/index.html" target="_blank" style="color:white;text-decoration:none;margin-right:12px;font-size:13px;padding:4px 10px;background:rgba(255,255,255,0.15);border-radius:4px;">🛒 商品展示</a>
+    <button class="btn btn-sm" style="background:rgba(255,255,255,0.2);color:white;border:none;" onclick="location.reload()">刷新</button>
+  </div>
+</div>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+</div>
+
+<div class="container">
+
+  <!-- ========== Tab 导航 ========== -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchExtractTab(this,'tab-step1')">📋 第一步·基础信息</button>
+    <button class="tab-btn" onclick="switchExtractTab(this,'tab-step2')">✏️ 第二步·补充信息</button>
+    <button class="tab-btn" onclick="switchExtractTab(this,'tab-step3')">🖼 第三步·批量图片导入</button>
+    <!-- 商品查询 Tab 已关闭 -->
+  </div>
+
+  <!-- ====== Tab 1: 第一步·基础信息 ====== -->
+  <div class="tab-panel active" id="tab-step1">
+
+  <!-- 第一步：可编辑表格 + 导入/导出 -->
+  <div class="card">
+    <div class="card-header">
+      <span>📋 第一步·基础信息</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-outline btn-sm" onclick="downloadStep1Template()">📥 下载第一步模板</button>
+        <label class="btn btn-outline btn-sm" style="cursor:pointer;margin:0;">
+          📤 导入Excel <input type="file" id="fileInput1" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleStep1FileImport(event)">
+        </label>
+        <button class="btn btn-outline btn-sm" onclick="exportStep1Excel()">📄 生成Excel</button>
+        <button class="btn btn-outline btn-sm" onclick="addStep1Row()">➕ 添加行</button>
+        <button class="btn btn-outline btn-sm" onclick="openSingleStep1Modal()" style="background:#e8f5e9;border-color:#27ae60;color:#27ae60;">📝 单个添加</button>
+        <button class="btn btn-outline btn-sm" id="btnBatchDelStep1" onclick="batchDelStep1Rows()" disabled>🗑 批量删除</button>
+        <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="clearStep1Table()">🗑 清空</button>
+      </div>
+    </div>
+    <div class="card-body" style="padding:8px;overflow-x:auto;">
+      <div style="margin-bottom:8px;font-size:12px;color:var(--text-secondary);">
+        💡 可直接在表格中编辑，也支持导入Excel填充。填写完成后点击<strong>"提交导入"</strong>保存至商城。
+      </div>
+      <div class="editable-table-wrapper" style="max-height:500px;overflow:auto;border:1px solid var(--border);border-radius:6px;">
+        <table class="editable-table" id="step1Table">
+          <thead id="step1TableHead"></thead>
+          <tbody id="step1TableBody"><tr><td colspan="22" style="text-align:center;color:var(--text-light);padding:40px;">暂无数据，请添加行或导入Excel</td></tr></tbody>
+        </table>
+      </div>
+      <div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-light" onclick="submitStep1Table()">✅ 提交导入（第一步）</button>
+        <span id="step1Msg" style="font-size:13px;color:var(--text-secondary);"></span>
+        <span id="step1Count" style="font-size:13px;color:var(--text-secondary);margin-left:auto;"></span>
+      </div>
+    </div>
+  </div>
+
+  </div><!-- /tab-step1 -->
+
+  <!-- ====== Tab 2: 第二步·补充信息 ====== -->
+  <div class="tab-panel" id="tab-step2">
+
+  <!-- 第二步：可编辑表格 + 导入/导出 -->
+  <div class="card">
+    <div class="card-header">
+      <span>✏️ 第二步·补充信息</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-outline btn-sm" onclick="downloadStep2Template()">📥 下载第二步模板</button>
+        <label class="btn btn-outline btn-sm" style="cursor:pointer;margin:0;">
+          📤 导入Excel <input type="file" id="fileInput2" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleStep2FileImport(event)">
+        </label>
+        <button class="btn btn-outline btn-sm" onclick="exportStep2Excel()">📄 生成Excel</button>
+        <button class="btn btn-outline btn-sm" onclick="addStep2Row()">➕ 添加行</button>
+        <button class="btn btn-outline btn-sm" onclick="openSingleStep2Modal()" style="background:#e8f5e9;border-color:#27ae60;color:#27ae60;">📝 单个添加</button>
+        <button class="btn btn-outline btn-sm" id="btnBatchDelStep2" onclick="batchDelStep2Rows()" disabled>🗑 批量删除</button>
+        <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="clearStep2Table()">🗑 清空</button>
+      </div>
+    </div>
+    <div class="card-body" style="padding:8px;overflow-x:auto;">
+      <div style="margin-bottom:8px;font-size:12px;color:var(--text-secondary);">
+        💡 可直接在表格中编辑，也支持导入Excel填充。填写完成后点击<strong>"提交导入"</strong>更新匹配商品。
+      </div>
+      <div class="editable-table-wrapper" style="max-height:500px;overflow:auto;border:1px solid var(--border);border-radius:6px;">
+        <table class="editable-table" id="step2Table">
+          <thead id="step2TableHead"></thead>
+          <tbody id="step2TableBody"><tr><td colspan="37" style="text-align:center;color:var(--text-light);padding:40px;">暂无数据，请添加行或导入Excel</td></tr></tbody>
+        </table>
+      </div>
+      <div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-light" onclick="submitStep2Table()">✅ 提交导入（第二步）</button>
+        <span id="step2Msg" style="font-size:13px;color:var(--text-secondary);"></span>
+        <span id="step2Count" style="font-size:13px;color:var(--text-secondary);margin-left:auto;"></span>
+      </div>
+    </div>
+  </div>
+
+  </div><!-- /tab-step2 -->
+
+  <!-- ====== Tab 3: 第三步·批量图片导入 ====== -->
+  <div class="tab-panel" id="tab-step3">
+
+  <!-- 图片命名规则 -->
+  <div class="card">
+    <div class="card-header">🏞 图片命名规则（系统根据文件名自动匹配SKU）</div>
+    <div class="card-body">
+      <div class="alert alert-info" style="margin-bottom:14px;">
+        <b>⚠ 图片文件名必须严格遵循以下规则，否则无法匹配：</b>
+      </div>
+      <div class="naming-examples">
+{SKU}01{XX}.扩展名  →  <b>主图</b>     示例：152055999<b>0101</b>.jpg  （主图第1张）
+{SKU}02{XX}.扩展名  →  <b>详情图</b>   示例：152055999<b>0201</b>.jpg  （详情图第1张）
+{SKU}03{XX}.扩展名  →  <b>备案截图</b> 示例：152055999<b>0301</b>.jpg  （备案截图第1张）
+      </div>
+      <div style="margin-top:8px;font-size:12px;color:var(--text-secondary);">
+        一般品类只需主图+详情图，部分品类需要备案截图。支持 jpg/jpeg/png/webp/gif。
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤A：下载模板 + 导入SKU创建任务 -->
+  <div class="card">
+    <div class="card-header">
+      📥 ① 下载模板 → 填入SKU → 导入创建任务
+      <span style="font-size:11px;font-weight:400;color:var(--text-light)">单次建议 ≤50 个SKU</span>
+    </div>
+    <div class="card-body">
+      <div class="btn-group" style="margin-bottom:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+        <button class="btn btn-outline btn-sm" onclick="batchDownloadTemplate()">📥 下载SKU导入模板</button>
+        <span style="font-size:12px;color:var(--text-secondary);">→ 填入序号和SKU编码后保存</span>
+      </div>
+      <input type="file" id="batchSkuFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="batchHandleSkuFile(event)">
+      <div class="upload-zone" onclick="document.getElementById('batchSkuFile').click()" style="padding:20px;">
+        <div class="icon">📋</div>
+        <div class="text">点击上传填好的SKU模板文件</div>
+        <div class="hint" id="batchSkuFileName" style="display:none;"></div>
+      </div>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <input type="text" id="batchSessionName" placeholder="任务名称（可选）：如"7月第一批"" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:240px;">
+        <button class="btn btn-primary btn-sm" id="btnBatchCreate" onclick="batchCreateSession()" disabled>✅ 确认，创建任务</button>
+        <span id="batchCreateMsg" style="font-size:13px;color:var(--text-secondary);"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 现有任务列表 -->
+  <div class="card">
+    <div class="card-header">
+      已创建的导入任务
+      <div class="btn-group" style="margin-left:auto;">
+        <button class="btn btn-outline btn-sm" onclick="batchLoadSessions()">🔄 刷新</button>
+        <button class="btn btn-danger btn-sm" id="btnBatchDeleteSessions" onclick="batchDeleteSelectedSessions()" disabled>🗑 批量删除</button>
+      </div>
+    </div>
+    <div class="card-body" id="batchSessionTableWrap">
+      <p style="color:var(--text-secondary);font-size:13px;">加载中...</p>
+    </div>
+  </div>
+
+  <!-- 步骤B：上传图片 -->
+  <div class="highlight-box">
+    <h3>🖼 ② 批量上传图片</h3>
+    <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <label style="font-size:13px;font-weight:600;">当前任务：</label>
+      <select id="batchUploadSessionSelect" style="padding:7px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:300px;" onchange="batchOnSessionChange()">
+        <option value="">-- 请选择任务 --</option>
+      </select>
+      <span id="batchUploadSessionInfo" style="font-size:12px;"></span>
+    </div>
+
+    <div class="alert alert-warning" style="margin-bottom:12px;">
+      选择要操作的导入任务。图片张数过多时可分多次上传。上传后系统按文件名自动匹配SKU。
+    </div>
+
+    <input type="file" id="batchImageFiles" accept="image/*" multiple style="display:none" onchange="batchHandleImages(event)">
+    <input type="file" id="batchImageFolder" accept="image/*" multiple style="display:none" onchange="batchHandleImages(event)" webkitdirectory>
+    <div class="batch-upload-zone" id="batchUploadZone"
+         ondragover="event.preventDefault();this.classList.add('drag-over')"
+         ondragleave="this.classList.remove('drag-over')"
+         ondrop="batchHandleDrop(event)">
+      <div class="icon" style="font-size:44px;">🖼</div>
+      <div style="font-size:16px;font-weight:600;color:var(--primary);">拖拽图片/文件夹到此处</div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">或点击选择图片上传（支持 jpg/png/webp/gif）</div>
+      <div class="picked-info" id="batchPickedCount" style="display:none;"></div>
+    </div>
+
+    <div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <button class="btn btn-primary" id="btnBatchUpload" onclick="batchUploadImages()" disabled style="padding:10px 24px;font-size:15px;">🚀 点击上传</button>
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('batchImageFolder').click()">📁 选文件夹</button>
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('batchImageFiles').click()">🖼 选图片</button>
+      <span id="batchUploadMsg" style="font-size:13px;color:var(--text-secondary);"></span>
+    </div>
+    <div id="batchUploadResult" style="margin-top:12px;display:none;"></div>
+  </div>
+
+  <!-- 步骤C：核对 + 结束上传 -->
+  <div class="card">
+    <div class="card-header">🔍 ③ 核对匹配结果 & 结束上传</div>
+    <div class="card-body">
+      <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <label style="font-size:13px;font-weight:600;">查看任务：</label>
+        <select id="batchReviewSessionSelect" style="padding:7px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:300px;" onchange="batchLoadReview()">
+          <option value="">-- 请选择任务 --</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="batchLoadReview()">🔄 刷新</button>
+      </div>
+
+      <div class="batch-stats-grid" id="batchReviewStats" style="display:none;"></div>
+      <div style="overflow-x:auto;max-height:400px;overflow-y:auto;" id="batchReviewTable">
+        <p style="color:var(--text-secondary);font-size:13px;">请选择任务查看匹配详情</p>
+      </div>
+
+      <div style="margin-top:16px;padding:12px;background:#fef9e7;border-radius:6px;border:1px solid #f9e79f;">
+        <b>⚠ 确认无误后，点击"结束上传"将图片正式绑定到商品。</b> 图片按名称覆盖或新增，操作不可撤销。
+      </div>
+
+      <div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <select id="batchFinalizeSessionSelect" style="padding:7px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:300px;" onchange="batchLoadFinalizePreview()">
+          <option value="">-- 选择要结束的任务 --</option>
+        </select>
+        <button class="btn btn-success" id="btnBatchFinalize" onclick="batchFinalize()" disabled>
+          ✔ 结束上传（正式绑定图片）
+        </button>
+        <span id="batchFinalizeMsg" style="font-size:13px;color:var(--text-secondary);"></span>
+      </div>
+      <div id="batchFinalizeResult" style="margin-top:12px;display:none;"></div>
+    </div>
+  </div>
+
+  <!-- 单个商品快速上传图片 -->
+  <div class="card">
+    <div class="card-header">📷 单个商品快速上传图片</div>
+    <div class="card-body">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="flex:1;min-width:220px;">
+          <label>搜索商品（输入名称/条码/SKU）</label>
+          <input type="text" id="singleImgSearch" placeholder="输入商品信息搜索..." oninput="searchSingleImgProduct()" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+          <select id="singleImgSelect" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-top:6px;max-height:160px;" size="1">
+            <option value="">-- 请先搜索并选择商品 --</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:14px;">
+        <div style="font-weight:600;font-size:13px;margin-bottom:8px;">🖼 主图（1-5张）</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;" id="singleMainSlots">
+          <label style="border:2px dashed #ccc;border-radius:8px;width:100px;height:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+            <span style="color:#999;font-size:12px;">+ 主图1</span>
+            <input type="file" accept="image/*" style="display:none" onchange="previewSingleSlot(this,1,'main')">
+          </label>
+          <label style="border:2px dashed #ccc;border-radius:8px;width:100px;height:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+            <span style="color:#999;font-size:12px;">+ 主图2</span>
+            <input type="file" accept="image/*" style="display:none" onchange="previewSingleSlot(this,2,'main')">
+          </label>
+          <label style="border:2px dashed #ccc;border-radius:8px;width:100px;height:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+            <span style="color:#999;font-size:12px;">+ 主图3</span>
+            <input type="file" accept="image/*" style="display:none" onchange="previewSingleSlot(this,3,'main')">
+          </label>
+          <label style="border:2px dashed #ccc;border-radius:8px;width:100px;height:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+            <span style="color:#999;font-size:12px;">+ 主图4</span>
+            <input type="file" accept="image/*" style="display:none" onchange="previewSingleSlot(this,4,'main')">
+          </label>
+          <label style="border:2px dashed #ccc;border-radius:8px;width:100px;height:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+            <span style="color:#999;font-size:12px;">+ 主图5</span>
+            <input type="file" accept="image/*" style="display:none" onchange="previewSingleSlot(this,5,'main')">
+          </label>
+        </div>
+      </div>
+      <div style="margin-top:14px;">
+        <div style="font-weight:600;font-size:13px;margin-bottom:8px;">📋 详情图（1-6张）</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;" id="singleDetailSlots">
+          <label style="border:2px dashed #ccc;border-radius:8px;width:100px;height:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+            <span style="color:#999;font-size:12px;">+ 详情1</span>
+            <input type="file" accept="image/*" style="display:none" onchange="previewSingleSlot(this,1,'detail')">
+          </label>
+          <label style="border:2px dashed #ccc;border-radius:8px;width:100px;height:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+            <span style="color:#999;font-size:12px;">+ 详情2</span>
+            <input type="file" accept="image/*" style="display:none" onchange="previewSingleSlot(this,2,'detail')">
+          </label>
+          <label style="border:2px dashed #ccc;border-radius:8px;width:100px;height:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+            <span style="color:#999;font-size:12px;">+ 详情3</span>
+            <input type="file" accept="image/*" style="display:none" onchange="previewSingleSlot(this,3,'detail')">
+          </label>
+          <label style="border:2px dashed #ccc;border-radius:8px;width:100px;height:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+            <span style="color:#999;font-size:12px;">+ 详情4</span>
+            <input type="file" accept="image/*" style="display:none" onchange="previewSingleSlot(this,4,'detail')">
+          </label>
+          <label style="border:2px dashed #ccc;border-radius:8px;width:100px;height:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+            <span style="color:#999;font-size:12px;">+ 详情5</span>
+            <input type="file" accept="image/*" style="display:none" onchange="previewSingleSlot(this,5,'detail')">
+          </label>
+          <label style="border:2px dashed #ccc;border-radius:8px;width:100px;height:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+            <span style="color:#999;font-size:12px;">+ 详情6</span>
+            <input type="file" accept="image/*" style="display:none" onchange="previewSingleSlot(this,6,'detail')">
+          </label>
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <button class="btn btn-primary btn-sm" id="btnSingleImgUpload" onclick="uploadSingleProductImages()" disabled>📤 上传图片</button>
+        <span id="singleImgMsg" style="font-size:13px;color:var(--text-secondary);margin-left:10px;"></span>
+      </div>
+    </div>
+  </div>
+
+  </div><!-- /tab-step3 -->
+
+  <!-- ====== Tab 4: 商品查询 (已关闭) ====== --><!--
+  <div class="tab-panel" id="tab-search">
+
+  <div class="card">
+    <div class="card-header">
+      📋 已录入商品查询
+      <span style="margin-left:auto;font-size:11px;font-weight:400;color:var(--text-light)">点击"编辑第一步/第二步"可回填到对应表单</span>
+    </div>
+    <div class="card-body">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <input type="text" id="productSearchInput" placeholder="🔍 搜索商品名称 / 品牌 / 单品编码..."
+          style="flex:1;min-width:220px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;"
+          onkeydown="if(event.key==='Enter')searchProductList()">
+        <button class="btn btn-primary btn-sm" onclick="searchProductList()" style="padding:8px 16px;">搜索</button>
+        <button class="btn btn-secondary btn-sm" onclick="clearProductSearch()" style="padding:8px 16px;">清空</button>
+        <span style="font-size:12px;color:var(--text-light)" id="searchResultInfo"></span>
+      </div>
+      <div class="table-scroll" style="margin-top:12px;max-height:420px;overflow-y:auto;">
+        <table class="data-table" style="font-size:12px;">
+          <thead>
+            <tr>
+              <th>商品名称</th>
+              <th>品牌</th>
+              <th>单品编码</th>
+              <th>分类</th>
+              <th>价格</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="productSearchBody">
+            <tr><td colspan="7" style="text-align:center;padding:30px;color:#999">请输入搜索关键词查询已录入商品</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  </div>--> <!-- /tab-search (disabled) -->
+
+</div>
+
+<!-- Step1 单个添加弹窗 -->
+<div class="modal-overlay" id="singleStep1Modal" onclick="if(event.target===this)closeSingleStep1Modal()">
+  <div class="modal-box" style="background:#fff;border-radius:12px;width:95vw;max-width:1100px;max-height:88vh;overflow-y:auto;padding:28px 32px;box-shadow:0 12px 48px rgba(0,0,0,0.25);">
+    <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid #eee;">
+      <h3 style="margin:0;font-size:18px;">📝 单个添加 - 第一步·基础信息</h3>
+      <button onclick="closeSingleStep1Modal()" style="background:none;border:none;font-size:28px;cursor:pointer;color:#999;line-height:1;">&times;</button>
+    </div>
+    <div id="singleStep1Form" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px 20px;"></div>
+    <div style="margin-top:20px;display:flex;gap:12px;justify-content:flex-end;padding-top:14px;border-top:1px solid #eee;">
+      <button class="btn btn-secondary btn-sm" onclick="closeSingleStep1Modal()">取消</button>
+      <button class="btn btn-light btn-sm" onclick="submitSingleStep1()">✅ 确认添加</button>
+    </div>
+  </div>
+</div>
+
+<!-- Step2 单个添加弹窗 -->
+<div class="modal-overlay" id="singleStep2Modal" onclick="if(event.target===this)closeSingleStep2Modal()">
+  <div class="modal-box" style="background:#fff;border-radius:12px;width:95vw;max-width:1100px;max-height:88vh;overflow-y:auto;padding:28px 32px;box-shadow:0 12px 48px rgba(0,0,0,0.25);">
+    <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid #eee;">
+      <h3 style="margin:0;font-size:18px;">📝 单个添加 - 第二步·补充信息</h3>
+      <button onclick="closeSingleStep2Modal()" style="background:none;border:none;font-size:28px;cursor:pointer;color:#999;line-height:1;">&times;</button>
+    </div>
+    <div id="singleStep2Form" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px 20px;"></div>
+    <div style="margin-top:20px;display:flex;gap:12px;justify-content:flex-end;padding-top:14px;border-top:1px solid #eee;">
+      <button class="btn btn-secondary btn-sm" onclick="closeSingleStep2Modal()">取消</button>
+      <button class="btn btn-light btn-sm" onclick="submitSingleStep2()">✅ 确认添加</button>
+    </div>
+  </div>
+</div>
+
+<!-- Image Preview Modal -->
+<div class="modal-overlay" id="imageModal" onclick="closeImageModal(event)">
+  <div class="modal-content" onclick="event.stopPropagation()">
+    <span class="modal-close" onclick="closeImageModal()">&times;</span>
+    <img id="modalImage" src="" alt="预览" referrerpolicy="no-referrer" onerror="handleModalImageError(this)">
+  </div>
+</div>
+
+
+<script>
+// ==================== 配置 ====================
+const API_BASE = '/api/products';
+
+// ==================== 第一步模板（基础信息） ====================
+const STEP1_HEADERS = [
+  '序号(必填)', '单品编码', '小类分类编码（必填）', '品牌名称（必填）', '货号/型号(必填，最多37字)',
+  '商品展示名称(必填，最多100字)', '商品开票名称(必填，最多40字)', '销售单位(必填)',
+  '商城展示价（必填）', '备案号类型(风险商品必填)', '备案号(风险商品必填)',
+  '供应商SKU编码（最多50字）', '供应商商品备注（最多100字）',
+  '吊牌价', '商品说明', '重量(KG)', '长(cm)', '宽(cm)', '高(cm)',
+  '条形码', '保质期（若没有保质期填-1）', '商品规格（最多40字）',
+  '销售指导价(>0数字，最多2位小数)'
+];
+
+// ==================== 第二步模板（补充信息） ====================
+const STEP2_HEADERS = [
+  '序号(必填)', '单品编码(必填)', 'sku编号(必填)', '商品尚未新增审核通过(是，否)', '专区上架价格(必填)',
+  '客户大类(填写名称)(必填)', '客户中类(填写名称)(必填)', '客户小类(填写名称)(必填)',
+  '一级分类(填写编码)(必填)', '二级分类(填写编码)(必填)', '三级分类(填写编码)(必填)',
+  '条形码（69码）(必填)', '重量（kg）(必填)', '总库存(必填)', '电商名称(必填)',
+  '比价链接(必填)', '比价链接价格(必填)', '包装单位(必填)', '商品别名(选填)',
+  '品牌名称(必填)', '预计到货周期（天）(必填)', '预计发货周期（天）(必填)', '起订量(必填)',
+  '货号/型号(必填)', '规格(必填)', '长（cm）(必填)', '宽（cm）(必填)', '高（cm）(必填)',
+  '商品质保期（月）(必填)', '重量单位(必填)', '产地三级编码(必填)', '退货类型(必填)',
+  '退货时长（日）(必填)', '换货类型(必填)', '换货时长（日）(必填)', '单位名称(必填)',
+  '单位编码(必填)', '是否信创商品(选填)'
+];
+
+// ==================== Toast ====================
+let toastTimer;
+function showToast(msg, type) {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const t = document.createElement('div');
+  t.className = 'toast toast-' + (type || 'info');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.remove(), 3000);
+}
+
+// ==================== Tab 切换 ====================
+function switchExtractTab(btn, tabId) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(tabId).classList.add('active');
+}
+
+// ==================== 模板下载 ====================
+function downloadStep1Template() {
+  const wb = XLSX.utils.book_new();
+  const row = {};
+  STEP1_HEADERS.forEach(h => row[h] = '');
+  row['序号(必填)'] = '1';
+  row['单品编码'] = '122759631';
+  row['小类分类编码（必填）'] = 'CAT001';
+  row['品牌名称（必填）'] = '示例品牌';
+  row['货号/型号(必填，最多37字)'] = 'X100';
+  row['商品展示名称(必填，最多100字)'] = '示例商品展示名称';
+  row['商品开票名称(必填，最多40字)'] = '示例商品开票名称';
+  row['销售单位(必填)'] = '个';
+  row['商城展示价（必填）'] = '100.00';
+  row['备案号类型(风险商品必填)'] = '无';
+  row['备案号(风险商品必填)'] = '无';
+  row['供应商SKU编码（最多50字）'] = 'V-SKU-001';
+  row['供应商商品备注（最多100字）'] = '示例备注';
+  row['吊牌价'] = '199.00';
+  row['商品说明'] = '这是一款示例商品';
+  row['重量(KG)'] = '0.5';
+  row['长(cm)'] = '15';
+  row['宽(cm)'] = '8';
+  row['高(cm)'] = '1';
+  row['条形码'] = '6901234567890';
+  row['保质期（若没有保质期填-1）'] = '-1';
+  row['商品规格（最多40字）'] = '黑色 128G';
+  row['销售指导价(>0数字，最多2位小数)'] = '85.50';
+  const ws = XLSX.utils.json_to_sheet([row]);
+  ws['!cols'] = STEP1_HEADERS.map(() => ({ wch: 22 }));
+  XLSX.utils.book_append_sheet(wb, ws, '第一步·基础信息');
+  XLSX.writeFile(wb, '商品录入模板_第一步_基础信息.xlsx');
+  showToast('第一步模板已下载', 'success');
+}
+
+function downloadStep2Template() {
+  const wb = XLSX.utils.book_new();
+  const row = {};
+  STEP2_HEADERS.forEach(h => row[h] = '');
+  row['序号(必填)'] = '1';
+  row['单品编码(必填)'] = '122759631';
+  row['sku编号(必填)'] = '122759631';
+  row['商品尚未新增审核通过(是，否)'] = '否';
+  row['专区上架价格(必填)'] = '100.00';
+  row['客户大类(填写名称)(必填)'] = '电子设备';
+  row['客户中类(填写名称)(必填)'] = '通信器材';
+  row['客户小类(填写名称)(必填)'] = '手机';
+  row['一级分类(填写编码)(必填)'] = '01';
+  row['二级分类(填写编码)(必填)'] = '0101';
+  row['三级分类(填写编码)(必填)'] = '010101';
+  row['条形码（69码）(必填)'] = '6901234567890';
+  row['重量（kg）(必填)'] = '0.5';
+  row['总库存(必填)'] = '100';
+  row['电商名称(必填)'] = '京东商城';
+  row['比价链接(必填)'] = 'https://item.example.com';
+  row['比价链接价格(必填)'] = '129.00';
+  row['包装单位(必填)'] = '个';
+  row['商品别名(选填)'] = '示例商品';
+  row['品牌名称(必填)'] = '示例品牌';
+  row['预计到货周期（天）(必填)'] = '7';
+  row['预计发货周期（天）(必填)'] = '3';
+  row['起订量(必填)'] = '1';
+  row['货号/型号(必填)'] = 'X100';
+  row['规格(必填)'] = '黑色 128G';
+  row['长（cm）(必填)'] = '15';
+  row['宽（cm）(必填)'] = '8';
+  row['高（cm）(必填)'] = '1';
+  row['商品质保期（月）(必填)'] = '12';
+  row['重量单位(必填)'] = 'kg';
+  row['产地三级编码(必填)'] = '440305';
+  row['退货类型(必填)'] = '支持退货';
+  row['退货时长（日）(必填)'] = '7';
+  row['换货类型(必填)'] = '支持换货';
+  row['换货时长（日）(必填)'] = '15';
+  row['单位名称(必填)'] = '个';
+  row['单位编码(必填)'] = 'PCS';
+  row['是否信创商品(选填)'] = '否';
+  const ws = XLSX.utils.json_to_sheet([row]);
+  ws['!cols'] = STEP2_HEADERS.map(() => ({ wch: 22 }));
+  XLSX.utils.book_append_sheet(wb, ws, '第二步·补充信息');
+  XLSX.writeFile(wb, '商品录入模板_第二步_补充信息.xlsx');
+  showToast('第二步模板已下载', 'success');
+}
+
+// ==================== 第一步·可编辑表格 ====================
+let step1TableData = [];
+
+function initStep1Table() {
+  const head = document.getElementById('step1TableHead');
+  head.innerHTML = '<tr><th style="width:32px;text-align:center;"><input type="checkbox" onclick="step1SelectAll(this)" title="全选"></th><th class="row-num">#</th>' +
+    STEP1_HEADERS.map(h => '<th>' + h + '</th>').join('') +
+    '<th style="width:36px;min-width:36px;"></th></tr>';
+  renderStep1Table();
+}
+
+function renderStep1Table() {
+  const body = document.getElementById('step1TableBody');
+  document.getElementById('step1Count').textContent = step1TableData.length ? '共 ' + step1TableData.length + ' 行' : '';
+  if (!step1TableData.length) {
+    body.innerHTML = '<tr><td colspan="' + (STEP1_HEADERS.length + 3) + '" style="text-align:center;color:var(--text-light);padding:40px;">暂无数据，请添加行或导入Excel</td></tr>';
+    return;
+  }
+  body.innerHTML = step1TableData.map((row, ri) => {
+    let html = '<tr><td style="text-align:center;"><input type="checkbox" class="step1-row-cb" value="' + ri + '" onchange="step1UpdateBatchDelBtn()"></td><td class="row-num">' + (ri + 1) + '</td>';
+    STEP1_HEADERS.forEach((h, ci) => {
+      html += '<td><input class="editable-cell" data-row="' + ri + '" data-col="' + ci + '" value="' + escapeHtml(row[h] || '') + '" onchange="onStep1CellChange(this)"></td>';
+    });
+    html += '<td><button class="del-btn" onclick="delStep1Row(' + ri + ')" title="删除">✕</button></td></tr>';
+    return html;
+  }).join('');
+  step1UpdateBatchDelBtn();
+}
+
+function onStep1CellChange(input) {
+  const ri = parseInt(input.dataset.row);
+  const ci = parseInt(input.dataset.col);
+  step1TableData[ri][STEP1_HEADERS[ci]] = input.value;
+}
+
+function addStep1Row() {
+  const row = {};
+  STEP1_HEADERS.forEach(h => row[h] = '');
+  step1TableData.push(row);
+  renderStep1Table();
+  const wrapper = document.querySelector('#step1TableBody').parentElement;
+  if (wrapper) setTimeout(() => wrapper.scrollTop = wrapper.scrollHeight, 50);
+}
+
+function delStep1Row(ri) {
+  step1TableData.splice(ri, 1);
+  renderStep1Table();
+}
+
+function step1SelectAll(cb) {
+  document.querySelectorAll('.step1-row-cb').forEach(el => el.checked = cb.checked);
+  step1UpdateBatchDelBtn();
+}
+
+function step1UpdateBatchDelBtn() {
+  const hasChecked = document.querySelectorAll('.step1-row-cb:checked').length > 0;
+  document.getElementById('btnBatchDelStep1').disabled = !hasChecked;
+}
+
+function batchDelStep1Rows() {
+  const selected = Array.from(document.querySelectorAll('.step1-row-cb:checked')).map(cb => parseInt(cb.value));
+  if (selected.length === 0) return;
+  if (!confirm('确定删除选中的 ' + selected.length + ' 行吗？')) return;
+  step1TableData = step1TableData.filter((_, i) => !selected.includes(i));
+  renderStep1Table();
+}
+
+function clearStep1Table() {
+  if (!step1TableData.length) return;
+  if (!confirm('确定要清空所有第一步数据吗？')) return;
+  step1TableData = [];
+  renderStep1Table();
+  document.getElementById('step1Msg').textContent = '';
+}
+
+// 暂存最近一次导入的原始 Excel（保留内嵌图片）
+let step1OriginalFile = null;
+
+function handleStep1FileImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  // 暂存原始 File 对象，提交时直接发送以保留内嵌图片
+  step1OriginalFile = file;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (rows.length < 2) { showToast('文件至少需要包含表头和数据行', 'error'); return; }
+      const headers = rows[0].map(h => String(h).trim());
+      const dataRows = rows.slice(1).filter(r => r.some(c => String(c).trim() !== ''));
+      const imported = dataRows.map(row => {
+        const obj = {};
+        STEP1_HEADERS.forEach(h => {
+          const idx = headers.findIndex(fh => fh === h);
+          obj[h] = idx >= 0 ? String(row[idx] || '').trim() : '';
+        });
+        return obj;
+      });
+      step1TableData = step1TableData.concat(imported);
+      renderStep1Table();
+      showToast('已从Excel导入 ' + imported.length + ' 行' + (file.name.toLowerCase().endsWith('.xlsx') ? '（含图片将一并提交）' : ''), 'success');
+    } catch (err) {
+      showToast('文件解析失败：' + err.message, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  event.target.value = '';
+}
+
+function exportStep1Excel() {
+  if (!step1TableData.length) { showToast('暂无数据可导出', 'error'); return; }
+  const wb = XLSX.utils.book_new();
+  const data = step1TableData.map(row => {
+    const obj = {};
+    STEP1_HEADERS.forEach(h => obj[h] = row[h] || '');
+    return obj;
+  });
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = STEP1_HEADERS.map(() => ({ wch: 18 }));
+  XLSX.utils.book_append_sheet(wb, ws, '第一步·基础信息');
+  XLSX.writeFile(wb, '商品录入_第一步_基础信息.xlsx');
+  showToast('Excel已生成并下载', 'success');
+}
+
+async function submitStep1Table() {
+  if (!step1TableData.length) { showToast('请先添加数据或导入Excel', 'error'); return; }
+  const msgEl = document.getElementById('step1Msg');
+  msgEl.textContent = '⏳ 正在提交...';
+  try {
+    const fd = new FormData();
+    let hasOriginal = false;
+    // 优先使用原始上传的 Excel（含内嵌图片）；否则用 SheetJS 重建一份纯文本的
+    if (step1OriginalFile && step1OriginalFile.name.toLowerCase().endsWith('.xlsx')) {
+      fd.append('file', step1OriginalFile, step1OriginalFile.name);
+      hasOriginal = true;
+    } else {
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(step1TableData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+      const blob = new Blob([new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }))], { type: 'application/octet-stream' });
+      fd.append('file', blob, 'step1.xlsx');
+    }
+
+    const res = await fetch(API_BASE + '/import-step1', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      const imgInfo = data.totalImages ? '，附带 ' + data.totalImages + ' 张图片' : (hasOriginal ? '' : '（未检测到图片）');
+      msgEl.innerHTML = '<span style="color:#27ae60;">✅ 导入完成：新增 ' + data.created + ' 条' + imgInfo + '</span>';
+      showToast('导入成功', 'success');
+      // 提交成功后清掉原始文件引用，避免下次误传旧文件
+      step1OriginalFile = null;
+    } else {
+      msgEl.innerHTML = '<span style="color:#e74c3c;">❌ ' + (data.error || '导入失败') + '</span>';
+      showToast('导入失败', 'error');
+    }
+  } catch (e) {
+    msgEl.innerHTML = '<span style="color:#e74c3c;">❌ 网络错误</span>';
+  }
+}
+
+initStep1Table();
+
+// ==================== 第二步·可编辑表格 ====================
+let step2TableData = [];
+
+function initStep2Table() {
+  const head = document.getElementById('step2TableHead');
+  head.innerHTML = '<tr><th style="width:32px;text-align:center;"><input type="checkbox" onclick="step2SelectAll(this)" title="全选"></th><th class="row-num">#</th>' +
+    STEP2_HEADERS.map(h => '<th>' + h + '</th>').join('') +
+    '<th style="width:36px;min-width:36px;"></th></tr>';
+  renderStep2Table();
+}
+
+function renderStep2Table() {
+  const body = document.getElementById('step2TableBody');
+  document.getElementById('step2Count').textContent = step2TableData.length ? '共 ' + step2TableData.length + ' 行' : '';
+  if (!step2TableData.length) {
+    body.innerHTML = '<tr><td colspan="' + (STEP2_HEADERS.length + 3) + '" style="text-align:center;color:var(--text-light);padding:40px;">暂无数据，请添加行或导入Excel</td></tr>';
+    return;
+  }
+  body.innerHTML = step2TableData.map((row, ri) => {
+    let html = '<tr><td style="text-align:center;"><input type="checkbox" class="step2-row-cb" value="' + ri + '" onchange="step2UpdateBatchDelBtn()"></td><td class="row-num">' + (ri + 1) + '</td>';
+    STEP2_HEADERS.forEach((h, ci) => {
+      html += '<td><input class="editable-cell" data-row="' + ri + '" data-col="' + ci + '" value="' + escapeHtml(row[h] || '') + '" onchange="onStep2CellChange(this)"></td>';
+    });
+    html += '<td><button class="del-btn" onclick="delStep2Row(' + ri + ')" title="删除">&times;</button></td></tr>';
+    return html;
+  }).join('');
+  step2UpdateBatchDelBtn();
+}
+
+function onStep2CellChange(input) {
+  const ri = parseInt(input.dataset.row);
+  const ci = parseInt(input.dataset.col);
+  step2TableData[ri][STEP2_HEADERS[ci]] = input.value;
+}
+
+function addStep2Row() {
+  const row = {};
+  STEP2_HEADERS.forEach(h => row[h] = '');
+  step2TableData.push(row);
+  renderStep2Table();
+  const wrapper = document.querySelector('#step2TableBody').parentElement;
+  if (wrapper) setTimeout(() => wrapper.scrollTop = wrapper.scrollHeight, 50);
+}
+
+function delStep2Row(ri) {
+  step2TableData.splice(ri, 1);
+  renderStep2Table();
+}
+
+function step2SelectAll(cb) {
+  document.querySelectorAll('.step2-row-cb').forEach(el => el.checked = cb.checked);
+  step2UpdateBatchDelBtn();
+}
+
+function step2UpdateBatchDelBtn() {
+  const hasChecked = document.querySelectorAll('.step2-row-cb:checked').length > 0;
+  document.getElementById('btnBatchDelStep2').disabled = !hasChecked;
+}
+
+function batchDelStep2Rows() {
+  const selected = Array.from(document.querySelectorAll('.step2-row-cb:checked')).map(cb => parseInt(cb.value));
+  if (selected.length === 0) return;
+  if (!confirm('确定删除选中的 ' + selected.length + ' 行吗？')) return;
+  step2TableData = step2TableData.filter((_, i) => !selected.includes(i));
+  renderStep2Table();
+}
+
+function clearStep2Table() {
+  if (!step2TableData.length) return;
+  if (!confirm('确定要清空所有第二步数据吗？')) return;
+  step2TableData = [];
+  renderStep2Table();
+  document.getElementById('step2Msg').textContent = '';
+}
+
+function handleStep2FileImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (rows.length < 2) { showToast('文件至少需要包含表头和数据行', 'error'); return; }
+      const headers = rows[0].map(h => String(h).trim());
+      const dataRows = rows.slice(1).filter(r => r.some(c => String(c).trim() !== ''));
+      const imported = dataRows.map(row => {
+        const obj = {};
+        STEP2_HEADERS.forEach(h => {
+          const idx = headers.findIndex(fh => fh === h);
+          obj[h] = idx >= 0 ? String(row[idx] || '').trim() : '';
+        });
+        return obj;
+      });
+      step2TableData = step2TableData.concat(imported);
+      renderStep2Table();
+      showToast('已从Excel导入 ' + imported.length + ' 行', 'success');
+    } catch (err) {
+      showToast('文件解析失败：' + err.message, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  event.target.value = '';
+}
+
+function exportStep2Excel() {
+  if (!step2TableData.length) { showToast('暂无数据可导出', 'error'); return; }
+  const wb = XLSX.utils.book_new();
+  const data = step2TableData.map(row => {
+    const obj = {};
+    STEP2_HEADERS.forEach(h => obj[h] = row[h] || '');
+    return obj;
+  });
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = STEP2_HEADERS.map(() => ({ wch: 22 }));
+  XLSX.utils.book_append_sheet(wb, ws, '第二步·补充信息');
+  XLSX.writeFile(wb, '商品录入_第二步_补充信息.xlsx');
+  showToast('Excel已生成并下载', 'success');
+}
+
+async function submitStep2Table() {
+  if (!step2TableData.length) { showToast('请先添加数据或导入Excel', 'error'); return; }
+  const msgEl = document.getElementById('step2Msg');
+  msgEl.textContent = '⏳ 正在提交...';
+  try {
+    // 将表格数据转为 Excel blob，通过 FormData 上传到现有 API
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(step2TableData);
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    const blob = new Blob([new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }))], { type: 'application/octet-stream' });
+    const fd = new FormData();
+    fd.append('file', blob, 'step2.xlsx');
+
+    const res = await fetch(API_BASE + '/import-step2', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      msgEl.innerHTML = '<span style="color:#27ae60;">✅ 导入完成：更新 ' + data.updated + ' 条，跳过 ' + (data.skipped || 0) + ' 条</span>';
+      showToast('导入成功', 'success');
+    } else {
+      msgEl.innerHTML = '<span style="color:#e74c3c;">❌ ' + (data.error || '导入失败') + '</span>';
+      showToast('导入失败', 'error');
+    }
+  } catch (e) {
+    msgEl.innerHTML = '<span style="color:#e74c3c;">❌ 网络错误</span>';
+  }
+}
+
+initStep2Table();
+
+// ==================== 工具函数 ====================
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function showImagePreview(url) {
+  const modal = document.getElementById('imageModal');
+  const img = document.getElementById('modalImage');
+  if (!modal || !img) return;
+  img.src = url;
+  modal.style.display = 'flex';
+}
+
+function handleModalImageError(img) { img.style.display = 'none'; }
+
+// ==================== 加载 XLSX.js ====================
+(function loadXLSX() {
+  if (typeof XLSX !== 'undefined') return;
+  const script = document.createElement('script');
+  script.src = 'https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  script.onload = () => console.log('XLSX.js 已就绪');
+  document.head.appendChild(script);
+})();
+
+// iframe 嵌入模式
+if (window.self !== window.top) {
+  document.body.classList.add('iframe-mode');
+}
+
+// ==================== 批量图片导入（第三步） ====================
+const BATCH_API = '/api/batch-image-import';
+let _batchSkuFile = null, _batchImageFiles = [], _batchSessions = [];
+
+function batchB64Safe(str) { try { return btoa(unescape(encodeURIComponent(str || ''))); } catch(e) { return ''; } }
+
+function batchDownloadTemplate() { window.open(BATCH_API + '/template', '_blank'); }
+
+function batchHandleSkuFile(e) {
+  const f = e.target.files[0]; if (!f) return;
+  _batchSkuFile = f;
+  const el = document.getElementById('batchSkuFileName');
+  el.style.display = 'block'; el.textContent = '✅ ' + f.name;
+  document.getElementById('btnBatchCreate').disabled = false;
+}
+
+async function batchCreateSession() {
+  if (!_batchSkuFile) { showToast('请先选择SKU模板文件', 'error'); return; }
+  const btn = document.getElementById('btnBatchCreate'), msgEl = document.getElementById('batchCreateMsg');
+  btn.disabled = true; msgEl.textContent = '创建中...';
+  try {
+    const fd = new FormData(); fd.append('file', _batchSkuFile);
+    const n = document.getElementById('batchSessionName').value.trim();
+    if (n) fd.append('name', n);
+    const resp = await fetch(BATCH_API + '/sessions', { method: 'POST', body: fd });
+    const r = await resp.json();
+    if (r.success) {
+      msgEl.textContent = '✅ 任务 #' + r.data.id + ' 创建成功！(' + r.data.skuCount + ' SKU)';
+      showToast('任务创建成功', 'success');
+      _batchSkuFile = null; document.getElementById('batchSkuFile').value = '';
+      document.getElementById('batchSkuFileName').style.display = 'none';
+      document.getElementById('btnBatchCreate').disabled = true;
+      await batchLoadSessions();
+      document.getElementById('batchUploadSessionSelect').value = r.data.id;
+      batchOnSessionChange();
+    } else {
+      msgEl.textContent = '❌ ' + (r.error || '创建失败');
+      showToast(r.error, 'error');
+    }
+  } catch(err) { msgEl.textContent = '❌ ' + err.message; showToast('创建失败', 'error'); }
+  btn.disabled = !_batchSkuFile;
+}
+
+async function batchLoadSessions() {
+  try {
+    const resp = await fetch(BATCH_API + '/sessions');
+    const r = await resp.json();
+    _batchSessions = r.data || [];
+    batchRefreshSessionSelects();
+    batchRenderSessionTable();
+  } catch(e) { /* ignore */ }
+}
+
+function batchRefreshSessionSelects() {
+  ['batchUploadSessionSelect','batchReviewSessionSelect','batchFinalizeSessionSelect'].forEach(sid => {
+    const sel = document.getElementById(sid); if (!sel) return;
+    const v = sel.value;
+    sel.innerHTML = '<option value="">-- 请选择任务 --</option>' +
+      _batchSessions.map(s => `<option value="${s.id}">#${s.id} - ${batchEsc(s.name||'未命名')} (${s.sku_count} SKU)${s.status==='completed'?' [已结束]':''}</option>`).join('');
+    if (v) sel.value = v;
+  });
+}
+
+function batchRenderSessionTable() {
+  const w = document.getElementById('batchSessionTableWrap'); if (!w) return;
+  if (_batchSessions.length === 0) { w.innerHTML = '<p style="color:var(--text-secondary);font-size:13px;">暂无导入任务</p>'; return; }
+  w.innerHTML = '<table class="session-tbl"><thead><tr><th style="width:40px;text-align:center;"><input type="checkbox" id="selectAllSessions" onclick="batchToggleSelectAll(this)" title="全选"></th><th>ID</th><th>名称</th><th>SKU数</th><th>状态</th><th>图片数</th><th>时间</th><th>操作</th></tr></thead><tbody>' +
+    _batchSessions.map(s => {
+      const st = s.stats || {};
+      const n = (st.total_main||0)+(st.total_detail||0)+(st.total_screenshot||0);
+      const bad = s.status === 'completed' ? '<span class="badge badge-success">已完成</span>' :
+        s.status === 'uploading' ? '<span class="badge badge-info">上传中</span>' : '<span class="badge bg-warning text-dark">待上传</span>';
+      return `<tr><td style="text-align:center;"><input type="checkbox" class="session-checkbox" value="${s.id}" onclick="batchUpdateDeleteBtn()"></td><td><b>#${s.id}</b></td><td>${batchEsc(s.name||'—')}</td><td>${s.sku_count}</td><td>${bad}</td><td>${n}</td><td style="font-size:11px;">${s.created_at||''}</td>
+        <td><button class="btn btn-primary btn-sm" onclick="batchSelectTask(${s.id})" ${s.status==='completed'?'disabled':''}>📤 上传</button>
+        <button class="btn btn-danger btn-sm" onclick="batchDeleteSession(${s.id})" title="删除任务">🗑</button></td></tr>`;
+    }).join('') + '</tbody></table>';
+  batchUpdateDeleteBtn();
+}
+
+function batchSelectTask(id) {
+  document.getElementById('batchUploadSessionSelect').value = id;
+  batchOnSessionChange();
+  switchExtractTab(document.querySelector('.tab-btn:nth-child(3)'), 'tab-step3');
+  document.querySelector('.highlight-box').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function batchDeleteSession(id) {
+  if (!confirm('确认删除任务 #' + id + '？')) return;
+  try {
+    const resp = await fetch(BATCH_API + '/sessions/' + id, { method: 'DELETE' });
+    const r = await resp.json();
+    if (r.success) { showToast('已删除', 'success'); batchLoadSessions(); }
+    else { showToast(r.error, 'error'); }
+  } catch(e) { showToast('删除失败', 'error'); }
+}
+
+function batchGetSelectedIds() {
+  return Array.from(document.querySelectorAll('.session-checkbox:checked')).map(cb => cb.value);
+}
+
+function batchUpdateDeleteBtn() {
+  const btn = document.getElementById('btnBatchDeleteSessions');
+  const ids = batchGetSelectedIds();
+  if (btn) btn.disabled = ids.length === 0;
+}
+
+function batchToggleSelectAll(checkbox) {
+  const checked = checkbox.checked;
+  document.querySelectorAll('.session-checkbox').forEach(cb => { cb.checked = checked; });
+  batchUpdateDeleteBtn();
+}
+
+async function batchDeleteSelectedSessions() {
+  const ids = batchGetSelectedIds();
+  if (ids.length === 0) return;
+  if (!confirm(`确认批量删除选中的 ${ids.length} 个任务？`)) return;
+  try {
+    const resp = await fetch(BATCH_API + '/sessions', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids })
+    });
+    const r = await resp.json();
+    if (r.success) { showToast(`已删除 ${r.deleted || ids.length} 个任务`, 'success'); batchLoadSessions(); }
+    else { showToast(r.error, 'error'); }
+  } catch(e) { showToast('批量删除失败', 'error'); }
+}
+
+async function batchOnSessionChange() {
+  const sid = document.getElementById('batchUploadSessionSelect').value;
+  const btn = document.getElementById('btnBatchUpload');
+  const infoEl = document.getElementById('batchUploadSessionInfo');
+  if (!sid) { btn.disabled = true; infoEl.innerHTML = ''; return; }
+  btn.disabled = false;
+  try {
+    const resp = await fetch(BATCH_API + '/sessions/' + sid);
+    const r = await resp.json();
+    if (r.success) {
+      const st = r.data.stats || {};
+      const n = (st.total_main||0)+(st.total_detail||0)+(st.total_screenshot||0);
+      infoEl.innerHTML = `<span class="badge badge-info">${st.total} SKU</span> 已传: <b>${n}</b> 张`;
+      if (r.data.session.status === 'completed') btn.disabled = true;
+    }
+  } catch(e) { /* ignore */ }
+}
+
+function batchHandleImages(e) {
+  const fs = Array.from(e.target.files);
+  if (fs.length === 0) return;
+  _batchImageFiles = fs;
+  document.getElementById('batchPickedCount').style.display = 'block';
+  document.getElementById('batchPickedCount').textContent = '已选择 ' + fs.length + ' 个图片文件';
+  document.getElementById('btnBatchUpload').disabled = !document.getElementById('batchUploadSessionSelect').value;
+}
+
+function batchHandleDrop(e) {
+  e.preventDefault(); e.target.classList.remove('drag-over');
+  const items = e.dataTransfer.items; const files = [];
+  function proc(entry) {
+    if (entry.isFile) entry.file(f => files.push(f));
+    else if (entry.isDirectory) { const rdr = entry.createReader(); rdr.readEntries(entries => entries.forEach(proc)); }
+  }
+  for (const it of items) {
+    if (it.kind === 'file') {
+      const entry = it.webkitGetAsEntry ? it.webkitGetAsEntry() : null;
+      if (entry) proc(entry); else files.push(it.getAsFile());
+    }
+  }
+  setTimeout(() => { if (files.length > 0) { _batchImageFiles = files; batchHandleImages({ target: { files } }); } }, 400);
+}
+
+async function batchUploadImages() {
+  const sid = document.getElementById('batchUploadSessionSelect').value;
+  if (!sid) { showToast('请先选择导入任务', 'error'); return; }
+  if (_batchImageFiles.length === 0) { showToast('请先选择图片文件', 'error'); return; }
+  const btn = document.getElementById('btnBatchUpload'), msgEl = document.getElementById('batchUploadMsg');
+  btn.disabled = true; msgEl.textContent = '上传 ' + _batchImageFiles.length + ' 张中...';
+  try {
+    const fd = new FormData();
+    _batchImageFiles.forEach(f => fd.append('images', f));
+    const resp = await fetch(BATCH_API + '/sessions/' + sid + '/upload', { method: 'POST', body: fd });
+    const r = await resp.json();
+    if (r.success) {
+      showToast('完成: 匹配' + r.data.matched + '张, 未匹配' + r.data.unmatched + '张', 'success');
+      msgEl.textContent = '✅ 匹配 ' + r.data.matched + ' 张，未匹配 ' + r.data.unmatched + ' 张';
+      let html = '';
+      if (r.data.skipped && r.data.skipped.length > 0) {
+        html += '<div class="alert alert-warning"><b>未匹配文件：</b><br>' + r.data.skipped.map(s => '• ' + batchEsc(s.filename) + ' — ' + s.reason).join('<br>') + '</div>';
+      }
+      document.getElementById('batchUploadResult').style.display = 'block';
+      document.getElementById('batchUploadResult').innerHTML = html;
+      _batchImageFiles = []; document.getElementById('batchImageFiles').value = '';
+      document.getElementById('batchImageFolder').value = '';
+      document.getElementById('batchPickedCount').style.display = 'none';
+      batchLoadSessions(); batchOnSessionChange();
+    } else { msgEl.textContent = '❌ ' + (r.error || '失败'); showToast(r.error, 'error'); }
+  } catch(e) { msgEl.textContent = '❌ ' + e.message; showToast('上传失败', 'error'); }
+  btn.disabled = false;
+}
+
+async function batchLoadReview() {
+  const sid = document.getElementById('batchReviewSessionSelect').value;
+  if (!sid) return;
+  try {
+    const resp = await fetch(BATCH_API + '/sessions/' + sid);
+    const r = await resp.json();
+    if (!r.success) { showToast(r.error, 'error'); return; }
+    const d = r.data, st = d.stats;
+    document.getElementById('batchReviewStats').style.display = 'grid';
+    document.getElementById('batchReviewStats').innerHTML =
+      `<div class="batch-stat-card pri"><div class="num">${st.total}</div><div class="lbl">SKU总数</div></div>
+       <div class="batch-stat-card suc"><div class="num">${st.matched}</div><div class="lbl">完整匹配</div></div>
+       <div class="batch-stat-card wrn"><div class="num">${st.partial}</div><div class="lbl">部分匹配</div></div>
+       <div class="batch-stat-card dgr"><div class="num">${st.unmatched}</div><div class="lbl">未匹配</div></div>
+       <div class="batch-stat-card"><div class="num">${st.totalMain+st.totalDetail+st.totalScreenshot}</div><div class="lbl">图片总数</div></div>`;
+
+    let html = '<table class="data-table" style="font-size:12px;"><thead><tr><th>序号</th><th>SKU编码</th><th>商品名</th><th>主图</th><th>详情图</th><th>备案</th><th>合计</th><th>状态</th></tr></thead><tbody>';
+    d.skus.forEach(s => {
+      const tot = (s.main_count||0)+(s.detail_count||0)+(s.screenshot_count||0);
+      const bad = s.status === 'matched' ? '✅ 完整' : s.status === 'partial' ? '⚠ 部分' : (s.product_id ? '⏳ 待传' : '❌ 未匹配');
+      html += `<tr><td>${s.seq}</td><td><b>${batchEsc(s.sku_code)}</b></td><td>${batchEsc(s.product_name||'—')}</td>
+        <td class="${s.main_count?'':'zero'}">${s.main_count||0}</td><td class="${s.detail_count?'':'zero'}">${s.detail_count||0}</td>
+        <td class="${s.screenshot_count?'':'zero'}">${s.screenshot_count||0}</td><td><b>${tot}</b></td><td>${bad}</td></tr>`;
+    });
+    html += '</tbody></table>';
+
+    if (d.imageFiles && d.imageFiles.length > 0) {
+      html += '<div style="margin-top:10px;font-weight:600;font-size:13px;">📁 已上传文件 (' + d.imageFiles.length + ' 张)</div>';
+      html += '<table class="data-table" style="font-size:11px;"><thead><tr><th>文件名</th><th>SKU</th><th>类型</th><th>序号</th><th>大小</th></tr></thead><tbody>';
+      d.imageFiles.forEach(f => {
+        const p = f.parsed, tp = p && p.imgType === 'main' ? '主图' : p && p.imgType === 'detail' ? '详情图' : p && p.imgType === 'screenshot' ? '备案' : '—';
+        html += `<tr><td style="font-family:monospace;">${batchEsc(f.filename)}</td><td>${p?batchEsc(p.skuCode):'—'}</td><td>${tp}</td><td>${p?p.seq:'—'}</td><td style="color:var(--text-secondary);">${batchFmtSize(f.size)}</td></tr>`;
+      });
+      html += '</tbody></table>';
+    }
+
+    document.getElementById('batchReviewTable').innerHTML = html;
+    document.getElementById('batchFinalizeSessionSelect').value = sid;
+    batchLoadFinalizePreview();
+  } catch(e) { document.getElementById('batchReviewTable').innerHTML = '<p style="color:red;">加载失败: ' + e.message + '</p>'; }
+}
+
+async function batchLoadFinalizePreview() {
+  const sid = document.getElementById('batchFinalizeSessionSelect').value;
+  const btn = document.getElementById('btnBatchFinalize');
+  if (!sid) { btn.disabled = true; return; }
+  try {
+    const resp = await fetch(BATCH_API + '/sessions/' + sid);
+    const r = await resp.json();
+    if (r.success) {
+      btn.disabled = r.data.session.status === 'completed';
+      document.getElementById('batchFinalizeMsg').textContent = r.data.session.status === 'completed' ? '✅ 已完成' : '';
+    }
+  } catch(e) { btn.disabled = true; }
+}
+
+async function batchFinalize() {
+  const sid = document.getElementById('batchFinalizeSessionSelect').value;
+  if (!sid) return;
+  if (!confirm('确认结束上传？图片将正式绑定到商品，不可撤销。')) return;
+  const btn = document.getElementById('btnBatchFinalize'), msgEl = document.getElementById('batchFinalizeMsg');
+  btn.disabled = true; msgEl.textContent = '绑定中...';
+  try {
+    const resp = await fetch(BATCH_API + '/sessions/' + sid + '/finalize', { method: 'POST' });
+    const r = await resp.json();
+    const re = document.getElementById('batchFinalizeResult'); re.style.display = 'block';
+    if (r.success) {
+      let html = '<div class="alert alert-success">✅ 完成！成功绑定 <b>' + r.data.bound + '</b> 张图片</div>';
+      if (r.data.skipped && r.data.skipped.length > 0) html += '<div class="alert alert-warning">⚠ ' + r.data.skipped.length + ' 张未绑定:<br>' + r.data.skipped.map(s => '• ' + batchEsc(s.filename) + ' — ' + s.reason).join('<br>') + '</div>';
+      re.innerHTML = html; msgEl.textContent = '✅ 完成'; showToast('图片绑定完成！', 'success'); batchLoadSessions();
+    } else { re.innerHTML = '<div class="alert alert-danger">❌ ' + batchEsc(r.error) + '</div>'; msgEl.textContent = '失败'; }
+  } catch(e) { document.getElementById('batchFinalizeResult').style.display = 'block'; document.getElementById('batchFinalizeResult').innerHTML = '<div class="alert alert-danger">❌ ' + e.message + '</div>'; }
+  btn.disabled = false;
+}
+
+function batchEsc(s) { if (!s) return ''; const d = document.createElement('span'); d.textContent = s; return d.innerHTML; }
+function batchFmtSize(b) { if (!b) return '0B'; return b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB'; }
+
+// 上传区域点击
+document.addEventListener('DOMContentLoaded', function() {
+  const uz = document.getElementById('batchUploadZone');
+  if (uz) uz.addEventListener('click', function() { document.getElementById('batchImageFiles').click(); });
+  batchLoadSessions();
+});
+
+// ==================== 第一步·单个添加弹窗 ====================
+function buildSingleStep1Form() {
+  const fields = [
+    { key: '序号(必填)', placeholder: '自动生成', readonly: true },
+    { key: '小类分类编码（必填）' },
+    { key: '品牌名称（必填）' },
+    { key: '货号/型号(必填，最多37字)' },
+    { key: '商品展示名称(必填，最多100字)' },
+    { key: '商品开票名称(必填，最多40字)' },
+    { key: '销售单位(必填)', placeholder: '个/包/箱' },
+    { key: '商城展示价（必填）', type: 'number', step: '0.01' },
+    { key: '备案号类型(风险商品必填)' },
+    { key: '备案号(风险商品必填)' },
+    { key: '供应商SKU编码（最多50字）' },
+    { key: '供应商商品备注（最多100字）' },
+    { key: '吊牌价', type: 'number', step: '0.01' },
+    { key: '商品说明' },
+    { key: '重量(KG)', type: 'number', step: '0.01' },
+    { key: '长(cm)', type: 'number', step: '0.1' },
+    { key: '宽(cm)', type: 'number', step: '0.1' },
+    { key: '高(cm)', type: 'number', step: '0.1' },
+    { key: '条形码' },
+    { key: '保质期（若没有保质期填-1）', type: 'number' },
+    { key: '商品规格（最多40字）' },
+    { key: '销售指导价(>0数字，最多2位小数)', type: 'number', step: '0.01' },
+  ];
+  const form = document.getElementById('singleStep1Form');
+  form.innerHTML = fields.map(f => {
+    const labelText = f.key;
+    const attrs = [
+      `placeholder="${f.placeholder || ''}"`,
+      `data-field="${f.key}"`,
+    ];
+    if (f.type) attrs.push(`type="${f.type}"`);
+    if (f.step) attrs.push(`step="${f.step}"`);
+    if (f.readonly) attrs.push('readonly');
+    return `<div class="form-group">
+      <label title="${labelText}" style="font-size:12px;font-weight:600;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${labelText}</label>
+      <input ${attrs.join(' ')} style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+    </div>`;
+  }).join('');
+  const seqEl = form.querySelector('[data-field="序号(必填)"]');
+  if (seqEl) seqEl.value = (step1TableData.length + 1);
+}
+
+function openSingleStep1Modal() {
+  buildSingleStep1Form();
+  document.getElementById('singleStep1Modal').style.display = 'flex';
+}
+function closeSingleStep1Modal() {
+  document.getElementById('singleStep1Modal').style.display = 'none';
+}
+
+function submitSingleStep1() {
+  const form = document.getElementById('singleStep1Form');
+  const inputs = form.querySelectorAll('input[data-field]');
+  const row = {};
+  let hasContent = false;
+  inputs.forEach(el => {
+    row[el.dataset.field] = el.value.trim();
+    if (el.value.trim()) hasContent = true;
+  });
+  if (!hasContent) { showToast('请至少填写一个字段', 'error'); return; }
+  // 序号自动生成
+  if (!row['序号(必填)']) row['序号(必填)'] = step1TableData.length + 1;
+  step1TableData.push(row);
+  renderStep1Table();
+  closeSingleStep1Modal();
+  showToast('已添加 1 行到第一步表格', 'success');
+}
+
+// ==================== 第二步·单个添加弹窗 ====================
+function buildSingleStep2Form() {
+  const fields = [
+    { key: '序号(必填)', placeholder: '自动生成', readonly: true },
+    { key: '单品编码(必填)' },
+    { key: '商品尚未新增审核通过(是，否)' },
+    { key: '专区上架价格(必填)', type: 'number', step: '0.01' },
+    { key: '客户大类(填写名称)(必填)' },
+    { key: '客户中类(填写名称)(必填)' },
+    { key: '客户小类(填写名称)(必填)' },
+    { key: '一级分类(填写编码)(必填)' },
+    { key: '二级分类(填写编码)(必填)' },
+    { key: '三级分类(填写编码)(必填)' },
+    { key: '条形码（69码）(必填)' },
+    { key: '重量（kg）(必填)', type: 'number', step: '0.01' },
+    { key: '总库存(必填)', type: 'number' },
+    { key: '电商名称(必填)' },
+    { key: '比价链接(必填)' },
+    { key: '比价链接价格(必填)', type: 'number', step: '0.01' },
+    { key: '包装单位(必填)', placeholder: '个/包/箱' },
+    { key: '商品别名(选填)' },
+    { key: '品牌名称(必填)' },
+    { key: '预计到货周期（天）(必填)', type: 'number' },
+    { key: '预计发货周期（天）(必填)', type: 'number' },
+    { key: '起订量(必填)', type: 'number' },
+    { key: '货号/型号(必填)' },
+    { key: '规格(必填)' },
+    { key: '长（cm）(必填)', type: 'number', step: '0.1' },
+    { key: '宽（cm）(必填)', type: 'number', step: '0.1' },
+    { key: '高（cm）(必填)', type: 'number', step: '0.1' },
+    { key: '商品质保期（月）(必填)', type: 'number' },
+    { key: '重量单位(必填)', placeholder: 'KG' },
+    { key: '产地三级编码(必填)' },
+    { key: '退货类型(必填)' },
+    { key: '退货时长（日）(必填)', type: 'number' },
+    { key: '换货类型(必填)' },
+    { key: '换货时长（日）(必填)', type: 'number' },
+    { key: '单位名称(必填)' },
+    { key: '单位编码(必填)' },
+    { key: '是否信创商品(选填)' },
+  ];
+  const form = document.getElementById('singleStep2Form');
+  form.innerHTML = fields.map(f => {
+    const labelText = f.key;
+    const attrs = [
+      `placeholder="${f.placeholder || ''}"`,
+      `data-field="${f.key}"`,
+    ];
+    if (f.type) attrs.push(`type="${f.type}"`);
+    if (f.step) attrs.push(`step="${f.step}"`);
+    if (f.readonly) attrs.push('readonly');
+    return `<div class="form-group">
+      <label title="${labelText}" style="font-size:12px;font-weight:600;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${labelText}</label>
+      <input ${attrs.join(' ')} style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+    </div>`;
+  }).join('');
+  const seqEl = form.querySelector('[data-field="序号(必填)"]');
+  if (seqEl) seqEl.value = (step2TableData.length + 1);
+}
+
+function openSingleStep2Modal() {
+  buildSingleStep2Form();
+  document.getElementById('singleStep2Modal').style.display = 'flex';
+}
+function closeSingleStep2Modal() {
+  document.getElementById('singleStep2Modal').style.display = 'none';
+}
+
+function submitSingleStep2() {
+  const form = document.getElementById('singleStep2Form');
+  const inputs = form.querySelectorAll('input[data-field]');
+  const row = {};
+  let hasContent = false;
+  inputs.forEach(el => {
+    row[el.dataset.field] = el.value.trim();
+    if (el.value.trim()) hasContent = true;
+  });
+  if (!hasContent) { showToast('请至少填写一个字段', 'error'); return; }
+  if (!row['序号(必填)']) row['序号(必填)'] = step2TableData.length + 1;
+  step2TableData.push(row);
+  renderStep2Table();
+  closeSingleStep2Modal();
+  showToast('已添加 1 行到第二步表格', 'success');
+}
+
+// ==================== 第三步·单个商品图片上传 ====================
+let _singleProductFiles = {}; // { 'main': [file1,file2...], 'detail': [file1,file2...] }
+_singleProductFiles.main = [null,null,null,null,null];
+_singleProductFiles.detail = [null,null,null,null,null,null];
+
+function searchSingleImgProduct() {
+  const q = document.getElementById('singleImgSearch').value.trim();
+  if (q.length < 2) return;
+  fetch(`${API_BASE}?keyword=${encodeURIComponent(q)}&pageSize=20`)
+    .then(r => r.json())
+    .then(data => {
+      const sel = document.getElementById('singleImgSelect');
+      sel.innerHTML = '<option value="">-- 选择商品 --</option>' +
+        (data.data || []).map(p => 
+          `<option value="${p.id}">[${p.id}] ${p.display_name||p.name} (${p.cr_sku||'无SKU'})</option>`
+        ).join('');
+      document.getElementById('btnSingleImgUpload').disabled = false;
+    });
+}
+
+function previewSingleSlot(input, idx, type) {
+  const label = input.parentElement;
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      label.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
+      label.style.border = '2px solid var(--primary)';
+    };
+    reader.readAsDataURL(input.files[0]);
+    _singleProductFiles[type][idx - 1] = input.files[0];
+  }
+}
+
+async function uploadSingleProductImages() {
+  const productId = document.getElementById('singleImgSelect').value;
+  if (!productId) { showToast('请先搜索并选择商品', 'error'); return; }
+  const allFiles = [
+    ..._singleProductFiles.main.filter(Boolean),
+    ..._singleProductFiles.detail.filter(Boolean)
+  ];
+  if (allFiles.length === 0) { showToast('请至少上传一张图片', 'error'); return; }
+
+  const fd = new FormData();
+  let idx = 0;
+  _singleProductFiles.main.forEach((f,i) => { if(f){fd.append('images',f,`main_${i+1}_${f.name}`); idx++;} });
+  _singleProductFiles.detail.forEach((f,i) => { if(f){fd.append('images',f,`detail_${i+1}_${f.name}`); idx++;} });
+
+  const msgEl = document.getElementById('singleImgMsg');
+  msgEl.textContent = '⏳ 上传中...';
+  try {
+    const res = await fetch(`${API_BASE}/${productId}/images/batch-upload`, { method: 'POST', body: fd });
+    const json = await res.json();
+    if (json.success) {
+      msgEl.innerHTML = '<span style="color:#27ae60;">✅ 上传成功，' + json.data.saved + ' 张已保存</span>';
+      // 重置
+      _singleProductFiles = { main: [null,null,null,null,null], detail: [null,null,null,null,null,null] };
+      ['singleMainSlots','singleDetailSlots'].forEach(id => {
+        document.getElementById(id).querySelectorAll('label').forEach(l => {
+          l.innerHTML = l.querySelector('span') ? l.querySelector('span').outerHTML : '+';
+          l.style.border = '2px dashed #ccc';
+        });
+      });
+    } else {
+      msgEl.innerHTML = '<span style="color:#e74c3c;">❌ ' + (json.error || '上传失败') + '</span>';
+    }
+  } catch(e) {
+    msgEl.innerHTML = '<span style="color:#e74c3c;">❌ 网络错误</span>';
+  }
+}
+</script>
+</body>
+</html>

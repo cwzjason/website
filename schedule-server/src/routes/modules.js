@@ -23,9 +23,25 @@ module.exports = function (db, tableName) {
   // ===== POST / - 创建记录（支持从草稿创建） =====
   router.post('/', (req, res) => {
     try {
-      const { openid, draft_id, title, description, ...extra } = req.body;
-      if (!openid) return res.status(400).json({ success: false, error: '缺少 openid' });
+      const { draft_id, title, description, ...extra } = req.body;
+      const openid = req.body.openid || "";
       if (!title) return res.status(400).json({ success: false, error: '缺少标题' });
+
+      // 禁止创建过去时间的任务（只允许未来的截止日期）
+      if (tableName === 'tasks' && extra.due_date) {
+        const trimmed = String(extra.due_date).trim();
+        const now = new Date();
+        let isPast = false;
+        if (trimmed.length === 10 && /^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+          const d = new Date(trimmed + 'T00:00:00');
+          const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          isPast = d < today;
+        } else {
+          const d = new Date(trimmed.replace(' ', 'T'));
+          isPast = !isNaN(d) && d < now;
+        }
+        if (isPast) return res.status(400).json({ success: false, error: '不能创建过去时间的任务，请使用未来的截止日期' });
+      }
 
       // 动态构建 INSERT：从 body 取对应表的允许字段
       const allowedFields = getAllowedFields(tableName);
@@ -69,18 +85,44 @@ module.exports = function (db, tableName) {
   // ===== GET / - 查询列表 =====
   router.get('/', (req, res) => {
     try {
-      const { openid, page = 1, pageSize = 20 } = req.query;
-      if (!openid) return res.status(400).json({ success: false, error: '缺少 openid' });
+      const { page = 1, pageSize = 20, due_date } = req.query;
+      const openid = req.query.openid || "";
       const offset = (Math.max(1, Number(page)) - 1) * Math.min(100, Number(pageSize));
       const limit = Math.min(100, Number(pageSize));
 
+      // 自动将过期的待办任务标记为已完成
+      if (tableName === 'tasks') {
+        try {
+          db.prepare(
+            "UPDATE tasks SET status = '已完成', updated_at = datetime('now','localtime') WHERE status = '待办' AND openid = ? AND due_date != '' AND date(due_date) < date('now','localtime')"
+          ).run(openid);
+        } catch (e) { /* 静默忽略 */ }
+      }
+
+      // 支持按截止日期过滤（用于 tasks 查询今日截止任务）
+      let whereClause = `openid = ? AND status != 'deleted'`;
+      const params = [openid];
+      if (due_date) {
+        whereClause += ` AND date(due_date) = date(?)`;
+        params.push(due_date);
+      } else if (req.query.expense_date) {
+        whereClause += ` AND date(expense_date) = date(?)`;
+        params.push(req.query.expense_date);
+      } else if (req.query.date) {
+        const dateField = tableName === 'tasks' ? 'due_date' :
+                          tableName === 'expenses' ? 'expense_date' :
+                          'created_at';
+        whereClause += ` AND date(${dateField}) = date(?)`;
+        params.push(req.query.date);
+      }
+
       const rows = db.prepare(
-        `SELECT * FROM ${tableName} WHERE openid = ? AND status != 'deleted' ORDER BY created_at DESC LIMIT ? OFFSET ?`
-      ).all(openid, limit, offset);
+        `SELECT * FROM ${tableName} WHERE ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`
+      ).all(...params, limit, offset);
 
       const countRow = db.prepare(
-        `SELECT COUNT(*) as total FROM ${tableName} WHERE openid = ? AND status != 'deleted'`
-      ).get(openid);
+        `SELECT COUNT(*) as total FROM ${tableName} WHERE ${whereClause}`
+      ).get(...params);
 
       res.json({ success: true, data: rows, total: countRow ? countRow.total : 0 });
     } catch (e) {

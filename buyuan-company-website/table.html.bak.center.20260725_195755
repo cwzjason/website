@@ -1,0 +1,2260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>我的多维表格 - 埠勤商贸</title>
+<script src="assets/js/auth-guard.js"></script>
+<style>
+  .navbar { position:fixed;top:0;left:0;right:0;height:60px;background:rgba(255,255,255,0.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid #e5e5e7;display:flex;align-items:center;justify-content:space-between;padding:0 40px;z-index:1000; }
+  .navbar-logo { display:flex;align-items:center;gap:10px;text-decoration:none; }
+  .plane-icon { width:36px;height:36px;flex-shrink:0; }
+  .logo-text { font-size:18px;font-weight:600;color:#1e3a8a;letter-spacing:0.3px; }
+  .nav-links { display:flex;list-style:none;gap:32px;align-items:center;margin:0; }
+  .nav-links a { text-decoration:none;color:#333;font-size:14px;font-weight:400;transition:color 0.2s; }
+  .nav-links a:hover { color:#1e3a8a; }
+  .nav-links a.active { color:#1e3a8a;font-weight:500; }
+</style>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💎</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="assets/js/main.js"></script>
+<style>
+  :root { --primary:#1e3a8a; --primary-dark:#162d62; --danger:#ef4444; --success:#22c55e; --warning:#f59e0b; --bg:#f1f5f9; --sidebar-w:240px; }
+  body { background:var(--bg); }
+  .app-page { padding-top:60px; display:flex; min-height:100vh; }
+
+  /* ===== Sidebar ===== */
+  .sidebar {
+    background:#fafafa;
+    position:fixed; top:60px; left:0; bottom:0; width:var(--sidebar-w);
+    background:#fff; border-right:1px solid #e2e8f0; z-index:800;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .sidebar-header { padding:18px 16px 12px; border-bottom:1px solid #f1f5f9; display:flex; align-items:center; justify-content:space-between; }
+  .sidebar-header h3 { font-size:14px; font-weight:700; color:#1e293b; margin:0; }
+  .sidebar-header .all-count { font-size:12px; color:#94a3b8; }
+  .sidebar-body { flex:1; overflow-y:auto; padding:8px; }
+  .sidebar-section { margin-bottom:4px; }
+  .sidebar-section-title {
+    font-size:11px; font-weight:600; color:#94a3b8; text-transform:uppercase;
+    padding:8px 8px 6px; letter-spacing:0.5px; display:flex; align-items:center;
+    justify-content:space-between; cursor:pointer; user-select:none;
+  }
+  .sidebar-section-title:hover { color:#64748b; }
+  .sidebar-section-title .arrow { font-size:10px; transition:transform 0.2s; }
+  .sidebar-section-title.collapsed .arrow { transform:rotate(-90deg); }
+  .table-item {
+    display:flex; align-items:center; gap:8px; padding:10px 10px;
+    border-radius:8px; cursor:pointer; transition:all 0.15s; position:relative; margin-bottom:2px;
+  }
+  .table-item:hover { background:#f8fafc; }
+  .table-item.active { background:#d6e4ff; color:var(--primary); }
+  .table-item .table-icon { font-size:16px; flex-shrink:0; }
+  .table-item .table-name { font-size:13px; font-weight:500; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .table-item .table-badge {
+    font-size:10px; font-weight:600; padding:2px 7px; border-radius:10px;
+    background:#f1f5f9; color:#64748b;
+  }
+  .table-item.active .table-badge { background:#91b5f0; color:#142b6e; }
+  .table-item .pin-dot { width:6px; height:6px; border-radius:50%; background:var(--primary); flex-shrink:0; }
+
+  /* 看板 tab */
+  .dashboard-item {
+    display:flex; align-items:center; gap:8px; padding:10px 10px;
+    border-radius:8px; cursor:pointer; transition:all 0.15s; margin:8px 0;
+    background:linear-gradient(135deg, #3168d5 0%, #1e4db3 100%);
+    color:#fff; box-shadow:0 2px 8px rgba(49,104,213,0.35);
+  }
+  .dashboard-item:hover { box-shadow:0 4px 16px rgba(49,104,213,0.5); transform:translateY(-1px); }
+  .dashboard-item.active { box-shadow:0 4px 20px rgba(49,104,213,0.55); }
+  .dashboard-item .d-icon { font-size:18px; }
+  .dashboard-item .d-name { font-size:13px; font-weight:600; }
+
+  .sidebar-collapsed-section { display:none; }
+  .sidebar-collapsed-section.show { display:block; }
+  .sidebar-divider { height:1px; background:#e2e8f0; margin:8px 4px; }
+
+  /* ===== Main Content ===== */
+  .main-content { margin-left:var(--sidebar-w); flex:1; padding:20px 24px 40px; min-width:0; }
+
+  /* ===== Topbar ===== */
+  .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:12px; flex-wrap:wrap; }
+  .topbar-left { display:flex; align-items:center; gap:10px; }
+  .topbar-left h2 { font-size:20px; font-weight:700; color:#1e293b; margin:0; }
+  .topbar-left .row-info { font-size:13px; color:#94a3b8; }
+  .topbar-right { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+
+  .btn {
+    padding:8px 14px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px;
+    font-weight:500; cursor:pointer; font-family:inherit; background:#fff; color:#475569;
+    display:inline-flex; align-items:center; gap:5px; transition:all 0.2s; white-space:nowrap;
+  }
+  .btn:hover { background:#f8fafc; border-color:#cbd5e1; }
+  .btn-primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+  .btn-primary:hover { background:var(--primary-dark); }
+  .btn-danger { color:#991b1b; border-color:#fecaca; background:#fef2f2; }
+  .btn-danger:hover { background:#fee2e2; }
+  .btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .btn-form { background:#ecfdf5; color:#065f46; border-color:#a7f3d0; }
+  .btn-form:hover { background:#d1fae5; border-color:#6ee7b7; }
+
+  .search-box { position:relative; }
+  .search-box input {
+    padding:8px 12px 8px 34px; border:1px solid #e2e8f0; border-radius:8px;
+    font-size:13px; width:200px; outline:none; font-family:inherit;
+  }
+  .search-box input:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(99,102,241,0.1); }
+  .search-box .s-icon { position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:13px; color:#94a3b8; }
+  .topbar-select {
+    padding:8px 30px 8px 12px; border:1px solid #e2e8f0; border-radius:8px;
+    font-size:13px; font-family:inherit; outline:none; background:#fff; cursor:pointer;
+    appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 8px center;
+  }
+  .topbar-select:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(99,102,241,0.1); }
+
+  /* ===== Table ===== */
+  .table-card { background:#fff; border-radius:14px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
+  .table-wrap { overflow-x:auto; overflow-y:auto; max-height:calc(100vh - 210px); }
+  .table-wrap::-webkit-scrollbar { height:10px; width:10px; }
+  .table-wrap::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:5px; }
+  .table-wrap::-webkit-scrollbar-thumb:hover { background:#94a3b8; }
+  .table-wrap table { width:auto; border-collapse:collapse; font-size:13px; min-width:100%; table-layout:fixed; }
+  .table-wrap thead { position:sticky; top:0; z-index:10; }
+  .table-wrap thead th {
+    background:#f8fafc; color:#475569; font-weight:600; padding:10px 8px;
+    border-bottom:2px solid #e2e8f0; white-space:nowrap; text-align:left;
+    cursor:pointer; user-select:none; font-size:12px;
+  }
+  .table-wrap thead th .sort-arrow { margin-left:2px; opacity:0.3; }
+  .table-wrap th.col-narrow, .table-wrap td.col-narrow { width:90px; min-width:90px !important; }
+  .table-wrap th.col-medium, .table-wrap td.col-medium { width:140px; }
+  .table-wrap th.col-xs,    .table-wrap td.col-xs    { width:60px; min-width:60px !important; }
+  .table-wrap th.col-wide,   .table-wrap td.col-wide   { width:240px; }
+  .table-wrap th.col-xwide,  .table-wrap td.col-xwide  { width:280px; }
+  .table-wrap thead th.sorted .sort-arrow { opacity:1; color:var(--primary); }
+  .table-wrap tbody td { padding:5px 6px; border-bottom:1px solid #f1f5f9; color:#334155; white-space:nowrap; min-width:90px; }
+  .table-wrap tbody td input {
+    width:100%; border:1px solid #e2e8f0; border-radius:5px; padding:5px 6px;
+    font-size:12px; font-family:inherit; outline:none; background:transparent; box-sizing:border-box; min-width:60px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .table-wrap tbody td input:focus { border-color:var(--primary); box-shadow:0 0 0 2px rgba(99,102,241,0.12); background:#fff; }
+  .table-wrap tbody tr { transition:background 0.1s; }
+  .table-wrap tbody tr:hover { background:#f8fafc; }
+  .table-wrap tbody tr.selected { background:#d6e4ff; }
+  .table-wrap tfoot td { padding:6px 6px; border-top:2px solid #6366f1; font-weight:600; color:#1e293b; background:#f8fafc; white-space:nowrap; }
+  .table-wrap tfoot td.num-col { text-align:right; font-family:"Inter","Noto Sans SC",monospace; }
+  .table-wrap td.num-col input { text-align:right; font-family:'Inter','Noto Sans SC',monospace; }
+  .table-wrap td.act-col { text-align:center; }
+  .table-wrap td.date-col { text-align:center; }
+.table-wrap td.act-col button { padding:3px 7px; font-size:11px; border-radius:4px; border:none; cursor:pointer; background:#eef2ff; color:#4f6ef7; transition:all 0.15s; }
+  .table-wrap td.act-col button:hover { background:#dde4ff; }
+  /* ---- 勾选列 ---- */
+  .table-wrap .cb-col input[type=checkbox] {
+    width:15px; height:15px; cursor:pointer; accent-color:var(--primary); margin:0;
+  }
+
+  .empty-state { text-align:center; padding:60px 20px; color:#94a3b8; }
+  .empty-state .icon { font-size:48px; margin-bottom:12px; }
+  .empty-state p { font-size:14px; }
+  .table-footer {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 16px; border-top:1px solid #f1f5f9; font-size:12px; color:#64748b;
+    flex-wrap:wrap; gap:8px;
+  }
+
+  /* ===== Dashboard ===== */
+  #dashboardView { display:none; }
+  #dashboardView.active { display:block; }
+  #tableView { display:block; }
+  #tableView.hidden { display:none; }
+
+  .db-kpi-row { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; margin-bottom:20px; }
+  .db-kpi-card {
+    background:#fff; border-radius:12px; padding:18px 20px; box-shadow:0 1px 3px rgba(0,0,0,0.06);
+    display:flex; align-items:center; gap:14px; transition:all 0.2s;
+  }
+  .db-kpi-card:hover { box-shadow:0 4px 12px rgba(0,0,0,0.1); }
+  .db-kpi-icon { width:46px; height:46px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0; }
+  .db-kpi-info { flex:1; min-width:0; }
+  .db-kpi-label { font-size:12px; color:#94a3b8; margin-bottom:2px; }
+  .db-kpi-value { font-size:24px; font-weight:700; color:#1e293b; }
+  .db-kpi-sub { font-size:11px; color:#94a3b8; margin-top:2px; }
+
+  .db-config-card {
+    background:#fff; border-radius:12px; padding:16px 20px; margin-bottom:16px;
+    box-shadow:0 1px 3px rgba(0,0,0,0.06); display:flex; align-items:center;
+    gap:12px; flex-wrap:wrap;
+  }
+  .db-config-card label { font-size:13px; font-weight:600; color:#475569; display:flex; align-items:center; gap:4px; white-space:nowrap; }
+  .db-config-card .config-divider { width:1px; height:24px; background:#e2e8f0; }
+
+  .db-charts-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(480px,1fr)); gap:16px; }
+  .db-chart-panel {
+    background:#fff; border-radius:14px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.06);
+    position:relative;
+  }
+  .db-chart-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .db-chart-title { font-size:15px; font-weight:600; color:#1e293b; }
+  .db-chart-actions { display:flex; gap:6px; }
+  .db-chart-actions .btn { padding:5px 10px; font-size:12px; }
+  .db-chart-body { position:relative; width:100%; }
+  .db-chart-body canvas { max-height:320px; }
+
+  .btn-sm { padding:5px 10px; font-size:12px; border-radius:6px; }
+  .db-add-chart {
+    display:flex; align-items:center; justify-content:center;
+    background:#fff; border:2px dashed #e2e8f0; border-radius:14px;
+    padding:40px 20px; cursor:pointer; color:#94a3b8;
+    transition:all 0.2s; min-height:200px;
+  }
+  .db-add-chart:hover { border-color:var(--primary); color:var(--primary); background:#f8fafc; }
+  .db-add-chart .plus { font-size:32px; margin-right:8px; }
+
+  .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(100px); background:#1e293b; color:#fff; padding:10px 20px; border-radius:10px; font-size:13px; z-index:9999; opacity:0; transition:all 0.3s; }
+  .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  @media (max-width:1024px) {
+    .db-charts-grid { grid-template-columns:1fr; }
+  }
+  @media (max-width:768px) {
+    .sidebar { width:240px; }
+    .main-content { margin-left:200px; padding:14px 12px; }
+    .db-kpi-row { grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); }
+  }
+  @media (max-width:600px) {
+    .sidebar { width:100%; height:auto; position:relative; top:auto; border-right:none; border-bottom:1px solid #e2e8f0; flex-shrink:0; max-height:200px; }
+    .sidebar-body { display:flex; overflow-x:auto; padding:4px; }
+    .sidebar-section { display:flex; gap:4px; }
+    .sidebar-section-title { display:none; }
+    .table-item { flex-shrink:0; width:auto; padding:6px 10px; font-size:11px; white-space:nowrap; }
+    .dashboard-item { flex-shrink:0; margin:0 4px; }
+    .main-content { margin-left:0; }
+    .app-page { flex-direction:column; }
+    .topbar { flex-direction:column; align-items:flex-start; }
+    .db-charts-grid { grid-template-columns:1fr; }
+    .db-config-card { flex-direction:column; align-items:stretch; }
+  }
+
+/* ===== 模态弹窗通用动画 ===== */
+@keyframes mfFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes mfSlideUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+@keyframes mfSpin{to{transform:rotate(360deg)}}
+
+/* ===== 表单新增 Modal ===== */
+.modal-overlay-form {
+  position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);
+  z-index:10000;align-items:center;justify-content:center;
+  animation:mfFadeIn .2s;
+}
+.modal-box-form {
+  background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,0.2);
+  width:580px;max-width:95vw;max-height:88vh;display:flex;flex-direction:column;
+  animation:mfSlideUp .25s;
+}
+.modal-mf-hd{padding:14px 20px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.modal-mf-hd h3{font-size:16px;font-weight:700;margin:0;color:#1a1a2e}
+.modal-mf-close{width:32px;height:32px;border:none;background:#f3f4f6;border-radius:8px;font-size:18px;cursor:pointer;color:#6b7280;display:flex;align-items:center;justify-content:center;transition:.15s}
+.modal-mf-close:hover{background:#e5e7eb;color:#111827}
+.modal-mf-info{padding:8px 20px 0;font-size:11px;color:#9ca3af;flex-shrink:0}
+.modal-mf-bd{padding:16px 20px;overflow-y:auto;flex:1}
+.modal-mf-bd .mf-fld{margin-bottom:12px}
+.modal-mf-bd .mf-fld label{display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:3px}
+.modal-mf-bd .mf-fld input,.modal-mf-bd .mf-fld textarea,.modal-mf-bd .mf-fld select{
+  width:100%;padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;
+  color:#1a1a2e;background:#fafbfc;outline:none;font-family:inherit;transition:border-color .2s;box-sizing:border-box
+}
+.modal-mf-bd .mf-fld input:focus,.modal-mf-bd .mf-fld textarea:focus,.modal-mf-bd .mf-fld select:focus{
+  border-color:#4f6ef7;box-shadow:0 0 0 2px rgba(79,110,247,0.08);background:#fff
+}
+.modal-mf-bd .mf-fld textarea{resize:vertical;min-height:56px}
+.modal-mf-bd .mf-fld input:disabled,.modal-mf-bd .mf-fld textarea:disabled{background:#f3f4f6;color:#9ca3af}
+.modal-mf-ft{padding:14px 20px;border-top:1px solid #e5e7eb;display:flex;gap:10px;flex-shrink:0}
+.mf-btn{flex:1;padding:10px 16px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s}
+.mf-btn-primary{background:#4f6ef7;color:#fff}
+.mf-btn-primary:hover{background:#3b5de7}
+.mf-btn-primary:disabled{background:#93a3f7;cursor:not-allowed}
+.mf-btn-cancel{background:#f3f4f6;color:#374151}
+.mf-btn-cancel:hover{background:#e5e7eb}
+.mf-status{margin:0 20px 10px;padding:8px 12px;border-radius:7px;font-size:12px;display:none;align-items:center;gap:6px}
+.mf-status.show{display:flex}
+.mf-status.ok{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}
+.mf-status.err{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+.mf-status.loading{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe}
+.mf-status .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.mf-status.ok .dot{background:#10b981}
+.mf-status.err .dot{background:#ef4444}
+.mf-status.loading .dot{background:#3b82f6;animation:mfSpin .6s linear infinite}
+
+/* ===== 文件上传 Modal ===== */
+.modal-overlay-upload {
+  position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);
+  z-index:10001;align-items:center;justify-content:center;
+  animation:mfFadeIn .2s;
+}
+.modal-box-upload {
+  background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,0.2);
+  width:650px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column;
+  animation:mfSlideUp .25s;
+}
+.modal-upload-hd{padding:14px 20px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.modal-upload-hd h3{font-size:16px;font-weight:700;margin:0;color:#1a1a2e}
+.modal-upload-close{width:32px;height:32px;border:none;background:#f3f4f6;border-radius:8px;font-size:18px;cursor:pointer;color:#6b7280;display:flex;align-items:center;justify-content:center;transition:.15s}
+.modal-upload-close:hover{background:#e5e7eb;color:#111827}
+.modal-upload-info{padding:8px 20px 0;font-size:11px;color:#9ca3af;flex-shrink:0}
+.modal-upload-area{padding:16px 20px;flex:1;overflow-y:auto}
+.upload-dropzone{
+  border:2px dashed #d1d5db;border-radius:12px;padding:36px 24px;
+  text-align:center;cursor:pointer;transition:all .2s;background:#fafbfc;
+  position:relative;
+}
+.upload-dropzone:hover,.upload-dropzone.drag-over{
+  border-color:#4f6ef7;background:#eef2ff;
+}
+.upload-dropzone .drop-icon{font-size:42px;margin-bottom:10px;display:block}
+.upload-dropzone .drop-title{font-size:15px;font-weight:700;color:#374151}
+.upload-dropzone .drop-hint{font-size:12px;color:#9ca3af;margin-top:4px}
+.upload-dropzone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.upload-file-badge{
+  display:none;align-items:center;gap:10px;padding:10px 14px;background:#eff6ff;
+  border:1px solid #bfdbfe;border-radius:9px;margin-top:12px;
+}
+.upload-file-badge .file-icon{font-size:24px}
+.upload-file-badge .file-name{flex:1;font-size:13px;font-weight:600;color:#1e40af}
+.upload-file-badge .file-size{font-size:11px;color:#64748b}
+.upload-file-badge .file-remove{cursor:pointer;color:#ef4444;font-size:16px;padding:2px 6px}
+.upload-preview-section{margin-top:16px;display:none}
+.upload-preview-section h4{font-size:13px;font-weight:700;color:#374151;margin:0 0 8px}
+.upload-preview-table-wrap{max-height:280px;overflow:auto;border:1px solid #e5e7eb;border-radius:8px}
+.upload-preview-table{width:100%;border-collapse:collapse;font-size:11px}
+.upload-preview-table th{
+  position:sticky;top:0;background:#f8fafc;padding:8px 10px;text-align:left;
+  border-bottom:2px solid #e2e8f0;font-weight:700;color:#475569;white-space:nowrap;
+}
+.upload-preview-table td{padding:6px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;white-space:nowrap}
+.upload-preview-table tr:hover td{background:#f8fafc}
+.upload-preview-count{font-size:11px;color:#6b7280;margin-top:6px}
+
+
+/* === 批量操作浮动工具栏 === */
+/* 选择模式切换按钮 */
+.btn-select-mode {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 12px; border: 1.5px dashed #cbd5e1; border-radius: 8px;
+  background: #fff; color: #64748b; cursor: pointer; font-size: 13px;
+  font-weight: 500; transition: all 0.2s; white-space: nowrap;
+}
+.btn-select-mode:hover { border-color: #818cf8; color: #6366f1; background: #f5f3ff; }
+.btn-select-mode.active {
+  border-style: solid; border-color: #6366f1; color: #6366f1;
+  background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.15);
+}
+
+/* 复选框列默认隐藏 */
+body:not(.selection-mode) .table-wrap th.cb-col,
+body:not(.selection-mode) .table-wrap td.cb-col {
+  width: 0 !important; min-width: 0 !important; padding: 0 !important;
+  overflow: hidden; border: none !important;
+}
+body:not(.selection-mode) .table-wrap .cb-col input[type=checkbox] {
+  display: none;
+}
+body.selection-mode .table-wrap th.cb-col,
+body.selection-mode .table-wrap td.cb-col {
+  width: 36px; min-width: 36px; text-align: center; padding: 4px 2px;
+  position: sticky; left: 0; z-index: 2;
+}
+body.selection-mode .table-wrap th.cb-col {
+  z-index: 4; background: #f8fafc;
+}
+body.selection-mode .table-wrap tbody td.cb-col {
+  background: #fff;
+}
+body.selection-mode .table-wrap tbody tr:hover td.cb-col {
+  background: #f8fafc;
+}
+body.selection-mode .table-wrap tbody tr.selected td.cb-col {
+  background: #d6e4ff;
+}
+
+.batch-toolbar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 9999;
+    display: none; align-items: center; justify-content: center;
+    padding: 14px 24px; gap: 40px;
+    background: #fff; border-top: 2px solid #e2e8f0;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+}
+.batch-toolbar.has-selection {
+    display: flex;
+    border-top-color: #818cf8;
+    background: linear-gradient(180deg, #ffffff, #f8faff);
+}
+.batch-toolbar-left {
+    display: flex; align-items: center; gap: 10px;
+}
+.batch-toolbar-left input[type="checkbox"] {
+    width: 18px; height: 18px; cursor: pointer; accent-color: #6366f1;
+}
+.batch-count { display: flex; align-items: baseline; gap: 4px; }
+.batch-count .num {
+    font-size: 28px; font-weight: 800;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    min-width: 30px; text-align: center;
+}
+.batch-count .label {
+    font-size: 14px; color: #64748b; font-weight: 600;
+}
+.batch-hint { display: none; }
+.batch-actions { display: flex; gap: 12px; }
+.btn-batch {
+    padding: 10px 24px; border: none; border-radius: 8px;
+    font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+}
+.btn-batch.btn-export {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+.btn-batch.btn-export:hover {
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.45); transform: translateY(-1px);
+}
+.btn-batch.btn-delete {
+    background: #fff; color: #ef4444; border: 1.5px solid #fecaca;
+}
+.btn-batch.btn-delete:hover {
+    background: #fef2f2; border-color: #ef4444; transform: translateY(-1px);
+}
+.btn-batch-close {
+    background: none; border: none; color: #94a3b8; font-size: 20px;
+    cursor: pointer; padding: 4px 8px; line-height: 1; border-radius: 6px;
+    margin-left: 10px; transition: all 0.2s;
+}
+.btn-batch-close:hover {
+    background: #f1f5f9; color: #475569;
+}
+
+/* 侧边栏底部 AI 入口 */
+.sidebar-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 16px;
+  background: linear-gradient(0deg, #2c3e50 0%, transparent 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ai-entry-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 10px;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  font-family: inherit;
+}
+
+.ai-entry-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.ai-entry-btn .ai-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.ai-entry-btn .ai-label {
+  flex: 1;
+  text-align: left;
+}
+
+.ai-entry-btn .ai-badge {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* 确保侧边栏有相对定位 */
+.sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 侧边栏内容区域留出底部空间 */
+.sidebar-nav,
+.sidebar-menu,
+.sidebar-content {
+  padding-bottom: 80px;
+}
+
+/* 抽屉层级调整 */
+.ai-drawer {
+  z-index: 1000;
+}
+
+.ai-toggle {
+  display: none !important;
+}
+</style>
+
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+<nav class="navbar">
+  <a href="index.html" class="navbar-logo">
+    <svg class="plane-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M24 4L8 36L20 30L24 44L28 30L40 36L24 4Z" fill="#1e3a8a"/>
+      <path d="M24 4L8 36L20 30L24 26L28 30L40 36L24 4Z" fill="#3b82f6"/>
+      <circle cx="24" cy="28" r="3" fill="#ffffff"/>
+      <rect x="22" y="14" width="4" height="14" rx="2" fill="#1e3a8a"/>
+    </svg>
+    <span class="logo-text">埠勤商贸</span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="index.html">首页</a></li>
+    <li><a href="about.html">关于我们</a></li>
+    <li><a href="products.html">产品服务</a></li>
+    <li><a href="table.html" class="active">我的表格</a></li>
+    <li><a href="https://qcncdkprniip.feishu.cn/app/JH6eb0yXDaPbRwsW8fpcA6p3n0z?pageId=pgeakzNKwKtIs7TK" target="_blank">经营仪表盘</a></li>
+    <li><span id="currentUser" style="color:#86868b;font-size:13px;margin-left:8px;"></span></li>
+    <li><a href="#" id="logoutBtn" style="color:#f56c6c">退出</a></li>
+  </ul>
+</nav>
+
+<div class="app-page">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h3>📑 表格列表</h3>
+      <span class="all-count" id="sidebarCount">9张</span>
+    </div>
+    <div id="dashboardTab" class="dashboard-item">
+      <span class="d-icon">📊</span><span class="d-name">数据看板</span>
+    </div>
+    <div class="sidebar-body">
+      <div class="sidebar-section" id="recentSection">
+        <div class="sidebar-section-title" id="recentToggle"><span>⭐ 最近使用</span><span class="arrow">▼</span></div>
+        <div class="sidebar-collapsed-section show" id="recentList"></div>
+      </div>
+      <div class="sidebar-section" id="allSection">
+        <div class="sidebar-section-title"><span>🗂️ 全部表格</span></div>
+        <div id="allTableList"></div>
+        <div class="sidebar-section-title" id="moreToggle" style="display:none"><span>更多表格</span><span class="arrow">▼</span></div>
+        <div class="sidebar-collapsed-section" id="moreTableList"></div>
+      </div>
+    </div>
+    
+  <!-- AI 助手入口 -->
+  <div class="sidebar-footer">
+    <button id="ai-entry" class="ai-entry-btn">
+      <span class="ai-icon">🤖</span>
+      <span class="ai-label">AI 助手</span>
+      <span class="ai-badge">Beta</span>
+    </button>
+  </div>
+  </aside>
+
+  <!-- Main Content: Table View -->
+  <main class="main-content" id="tableView">
+    <div class="topbar">
+      <div class="topbar-left">
+        <h2 id="activeTableName">销售表</h2>
+        <span class="row-info" id="activeTableInfo">10 条</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn-select-mode" id="selectModeBtn" title="点击进入批量选择模式">☑ 选择</button>
+        <button class="btn btn-form" id="formAddBtn">📝 表单新增</button>
+        <div class="search-box"><span class="s-icon">🔍</span><input type="text" id="searchInput" placeholder="搜索..."></div>
+        <button class="btn" id="clearBtn">清除</button>
+        <button class="btn" id="importBtn">📤 导入Excel</button>
+        <input type="file" id="importFileInput" accept=".xlsx,.xls" style="display:none">
+        <button class="btn" id="exportBtn">📥 导出 Excel</button>
+      </div>
+    </div>
+    <div class="table-card">
+      <div class="table-wrap">
+        <table id="dataTable"><thead><tr id="tableHeadRow"></tr></thead><tbody id="tableBody"></tbody><tfoot id="tableFoot"></tfoot></table>
+      </div>
+      <div class="table-footer">
+        <span>显示 <strong id="shownCount">0</strong> / <strong id="totalCount">0</strong> 条</span>
+        <span class="stats" id="sumStats"></span>
+      </div>
+    </div>
+    <!-- 批量操作工具栏 -->
+    <div class="batch-toolbar" id="batchToolbar">
+        <div class="batch-toolbar-left">
+            <input type="checkbox" id="batchSelectAll" title="全选/取消全选">
+            <div class="batch-count">
+                <span class="num" id="batchCountNum">0</span>
+                <span class="label">条选中</span>
+            </div>
+            <span class="batch-hint" id="batchHint">— 勾选左侧复选框开始批量操作</span>
+        </div>
+        <div class="batch-actions">
+            <button class="btn-batch btn-export" id="batchExportBtn">📥 导出 Excel</button>
+            <button class="btn-batch btn-delete" id="batchDeleteBtn">🗑 删除选中</button>
+            <button class="btn-batch-close" id="batchCloseBtn" title="关闭工具栏">✕</button>
+        </div>
+    </div>
+  </main>
+
+  <!-- Main Content: Dashboard View -->
+  <main class="main-content" id="dashboardView">
+    <!-- KPI Cards -->
+    <div class="db-kpi-row" id="kpiRow"></div>
+
+    <!-- Chart Config -->
+    <div class="db-config-card" id="globalChartConfig">
+      <label>📋 数据源
+        <select class="topbar-select" id="dbDataSource">
+          <option value="销售表">销售表</option><option value="采购成本表">采购成本表</option><option value="收款表">收款表</option><option value="费用表">费用表</option><option value="利润表">利润表</option><option value="承包确认单">承包确认单</option><option value="客户统计表">客户统计表</option><option value="每日流水">每日流水</option><option value="平台结算折扣率">平台结算折扣率</option>
+        </select>
+      </label>
+      <div class="config-divider"></div>
+      <label>📊 图表类型
+        <select class="topbar-select" id="dbChartTypeGlobal">
+          <option value="bar">柱状图</option>
+          <option value="horizontalBar">横向柱状图</option>
+          <option value="line">折线图</option>
+          <option value="pie">饼图</option>
+          <option value="doughnut">环形图</option>
+          <option value="radar">雷达图</option>
+          <option value="polarArea">极地图</option>
+          <option value="scatter">散点图</option>
+        </select>
+      </label>
+      <div class="config-divider"></div>
+      <label>🏷️ 标签(X轴)
+        <select class="topbar-select" id="dbLabelCol" style="min-width:120px;">
+          <option value="">-- 自动选择 --</option>
+        </select>
+      </label>
+      <div class="config-divider"></div>
+      <label>📈 数值(Y轴)
+        <select class="topbar-select" id="dbValueCol" style="min-width:120px;">
+          <option value="">-- 自动选择 --</option>
+        </select>
+      </label>
+      <div class="config-divider"></div>
+      <button class="btn btn-primary btn-sm" id="dbAddChartBtn">+ 添加图表</button>
+      <button class="btn btn-sm" id="dbClearAllBtn">清空全部</button>
+    </div>
+
+    <!-- Charts Area -->
+    <div class="db-charts-grid" id="chartsGrid">
+      <!-- Default chart will be here -->
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+
+<!-- 表单新增Modal -->
+<div class="modal-overlay-form" id="formAddModal" style="display:none;">
+  <div class="modal-box-form">
+    <div class="modal-mf-hd">
+      <h3 id="formModalTitle">📝 表单新增</h3>
+      <button class="modal-mf-close" onclick="closeFormModal()">✕</button>
+    </div>
+    <div class="modal-mf-info" id="formModalInfo"></div>
+    <div class="modal-mf-bd" id="formModalBody"></div>
+    <div class="mf-status" id="formModalStatus"><span class="dot"></span><span id="formModalStatusTxt"></span></div>
+    <div class="modal-mf-ft">
+      <button class="mf-btn mf-btn-cancel" onclick="closeFormModal()">取消</button>
+      <button class="mf-btn mf-btn-primary" id="formModalSubmitBtn" onclick="submitFormModal()">提交数据</button>
+    </div>
+  </div>
+</div>
+
+<!-- 文件上传Modal -->
+<div class="modal-overlay-upload" id="uploadModal" style="display:none;">
+  <div class="modal-box-upload">
+    <div class="modal-upload-hd">
+      <h3>📤 导入Excel文件</h3>
+      <button class="modal-upload-close" onclick="closeUploadModal()">✕</button>
+    </div>
+    <div class="modal-upload-info" id="uploadModalInfo">当前表格: -- · 上传后数据将追加到已有记录中</div>
+    <div class="modal-upload-area">
+      <div class="upload-dropzone" id="uploadDropzone">
+        <span class="drop-icon">📁</span>
+        <span class="drop-title">点击选择文件 或拖拽到此处</span>
+        <span class="drop-hint">支持 .xlsx / .xls 格式 · 第一行为表头</span>
+        <input type="file" id="uploadFileInput" accept=".xlsx,.xls" onchange="uploadFileSelected(this)">
+      </div>
+      <div class="upload-file-badge" id="uploadFileBadge">
+        <span class="file-icon">📄</span>
+        <span class="file-name" id="uploadFileName">--</span>
+        <span class="file-size" id="uploadFileSize">--</span>
+        <span class="file-remove" onclick="clearUploadFile()" title="移除文件">✕</span>
+      </div>
+      <div class="upload-preview-section" id="uploadPreviewSection">
+        <h4>📋 预览数据 <span id="uploadPreviewCount" style="font-weight:400;color:#9ca3af"></span></h4>
+        <div class="upload-preview-table-wrap">
+          <table class="upload-preview-table">
+            <thead id="uploadPreviewHead"></thead>
+            <tbody id="uploadPreviewBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="mf-status" id="uploadStatus"><span class="dot"></span><span id="uploadStatusTxt"></span></div>
+    <div class="modal-mf-ft">
+      <button class="mf-btn mf-btn-cancel" onclick="closeUploadModal()">取消</button>
+      <button class="mf-btn mf-btn-primary" id="uploadSubmitBtn" onclick="submitUpload()" disabled>📤 导入数据</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+(function(){
+  var ALL_DATA = {"销售表":{"headers":["编号","订单编号","订单日期","收料单位","供应商名称","单品编码","商品名称","品牌","单位","数量","单价（含税）","订单小计（含税）","业绩归属","备注"],"rows":[],"row_count":0},"采购成本表":{"headers":["编号","订单编号","订单日期","单品编码","商品名称","品牌","单位","数量","不含税单价","税率","含税单价","成本小计（含税）","实际采购品牌","采购定金","采购尾款","供货商名称","联系人","联系电话","发货地址","物流信息","备注"],"rows":[],"row_count":0},"收款表":{"headers":["编号","订单编号","单品编码","订单日期","收料单位","供应商名称","订单小计（含税）","折扣率","服务费","开票金额","实收金额","成本小计（含税）","毛利","税率","税额","净收入","回款金额","回款日期","备注"],"rows":[],"row_count":0},"费用表":{"headers":["编号","订单编号","订单日期","收料单位","单品编码","报销日期","物流费","搬运费","安装费","业务费","招待费","交通费","住宿费","误餐费","借支","其他","备注","费用小计","报销人","审批人"],"rows":[],"row_count":0},"利润表":{"headers":["编号","订单编号","订单日期","收料单位","单品编码","净收入","费用小计","利润","业绩归属"],"rows":[],"row_count":0},"承包确认单":{"headers":["月份","姓名","总利润","承包费","助理工资","补助","应得","备注"],"rows":[],"row_count":0},"客户统计表":{"headers":["编号","订单编号","订单日期","收料单位","单品编码","下单姓名","下单人职务","下单人电话","收货人","收货人联系方式","收货地址","客户分级","备注"],"rows":[],"row_count":0},"每日流水":{"headers":["日期","订单编号","分类","费用明细","支出","收入","银行余额","备注","填表说明：1.付款（采购）——向供应商采购支付的费用；2.、收款（结算）——客户打款到账的收入；3.费用表——用于报销的物流费、搬运费、安装费、业务费、招待费、交通费、住宿费、误餐费；4.办公费（笔墨、房租等、办公杂品）5.税金；6.工资"],"rows":[],"row_count":0},"平台结算折扣率":{"headers":[],"rows":[],"row_count":0}};
+
+  var tableNames = ["销售表", "采购成本表", "收款表", "费用表", "利润表", "承包确认单", "客户统计表", "每日流水", "平台结算折扣率"];
+  var STORAGE_KEY = 'buqin_multi_table_v2';
+  var DASHBOARD_KEY = 'buqin_dashboard_charts_v2';
+  var RECENT_KEY = 'buqin_recent_tables';
+  var RECENT_MAX = 5;
+  var VISIBLE_COUNT = 5;
+
+  var currentTable = tableNames[0];
+  var currentSort = { col: -1, asc: true };
+  var searchTerm = '';
+  var selectedRows = new Set();
+  var currentView = 'table'; // 'table' or 'dashboard'
+  var chartInstances = {}; // chartId -> Chart instance
+  var chartConfigs = []; // saved chart configurations
+
+  // ===== Data Management（所有数据以云服务器为准，禁用本地缓存）=====
+  var SERVER_SYNC_URL = '/api/tables';
+  var pushTimer = null;
+  var SYNC_INTERVAL = 2000;  // 2秒同步
+var _syncing = false;      // 同步锁，防止并发
+  var _tableVersions = {};   // 本地记录的版本号
+  var _syncedOnce = false;   // 首次强制拉取服务器标志
+
+  // ── 立即清除所有本地缓存（强制全局使用服务器数据）──
+  try {
+    [STORAGE_KEY, DASHBOARD_KEY, RECENT_KEY].forEach(function(k) { localStorage.removeItem(k); });
+  } catch(e) {}
+
+  function loadData() {
+    // 直接从服务器拉取最新数据，不读任何本地缓存
+    pullFromServer();
+  }
+
+  function saveData() {
+    // 300ms 防抖推送当前表格到服务器（不再写 localStorage，所有数据以服务器为准）
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(function() {
+      pushCurrentTable();
+    }, 300);
+  }
+
+  // ---- 推送到服务器 ----
+  function syncOneTable(tableName) {
+    var rs = ALL_DATA[tableName].rows;
+    var seen = {};
+    for (var i = 0; i < rs.length; i++) {
+      var bh = String(rs[i]['编号'] || '').trim();
+      if (!bh) continue;
+      if (seen[bh] !== undefined) {
+        console.log('表格 ' + tableName + ' 编号 "' + bh + '" 重复，跳过同步');
+        return;
+      }
+      seen[bh] = i;
+    }
+    var payload = JSON.stringify({ rows: rs });
+    ALL_DATA[tableName]._hash = payload;
+    fetch(SERVER_SYNC_URL + '/' + encodeURIComponent(tableName) + '/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload
+    }).then(function(r){
+      if (!r.ok && r.status === 409) {
+        return r.json().then(function(d){
+          console.log(tableName + ' sync: ' + d.error);
+          // 数据冲突，立即拉取最新数据覆盖本地
+          setTimeout(function() { pullFromServer(); }, 100);
+        });
+      }
+      _tableVersions[tableName] = (_tableVersions[tableName] || 0) + 1;
+      console.log(tableName + ' synced (' + rs.length + ' rows)');
+    }).catch(function(e) { console.log(tableName + ' sync failed:', e); });
+  }
+
+  function pushCurrentTable() {
+    if (!currentTable) return;
+    // 同步当前活跃表
+    syncOneTable(currentTable);
+  }
+
+  function pushAllTables() {
+    for (var name in ALL_DATA) {
+      if (ALL_DATA[name]) syncOneTable(name);
+    }
+  }
+
+  // ---- 从服务器拉取 ----
+  function pullFromServer() {
+    if (_syncing) return;  // 等上一次完成再说，别积压
+    _syncing = true;
+    fetch(SERVER_SYNC_URL + '/version')
+      .then(function(r) { return r.json(); })
+      .then(function(versions) {
+        var changedTables = [];
+        for (var t in versions) {
+          if (!ALL_DATA[t]) continue;
+          if (versions[t] !== (_tableVersions[t] || 0)) {
+            changedTables.push(t);
+            _tableVersions[t] = versions[t];
+          }
+        }
+        if (changedTables.length === 0 && _syncedOnce) return;
+        if (!_syncedOnce) _syncedOnce = true;
+        return fetch(SERVER_SYNC_URL).then(function(r) { return r.json(); });
+      })
+      .then(function(serverData) {
+        if (!serverData) return;
+        var changed = false;
+        for (var tableName in serverData) {
+          if (!ALL_DATA[tableName]) continue;
+          var svrRows = serverData[tableName].rows || [];
+          var newHash = JSON.stringify(svrRows);
+          if (ALL_DATA[tableName]._hash === newHash) continue;
+          ALL_DATA[tableName]._hash = newHash;
+          ALL_DATA[tableName].rows = svrRows;
+          ALL_DATA[tableName].headers = serverData[tableName].headers || ALL_DATA[tableName].headers;
+          ALL_DATA[tableName].row_count = svrRows.length;
+          changed = true;
+        }
+        if (changed) {
+          renderSidebar();
+          // 任何表的数据变化都强制重新渲染当前表格（最稳妥）
+          renderTable();
+        }
+      }).finally(function() { _syncing = false; })
+      .catch(function(e) { _syncing = false; console.log('拉取数据失败:', e); });
+  }
+
+  // 强制从服务器拉取并刷新（无视版本号/hash缓存）
+  function pullFreshData() {
+    if (_syncing) return;
+    _syncing = true;
+    fetch(SERVER_SYNC_URL).then(function(r) { return r.json(); }).then(function(serverData) {
+      if (!serverData) return;
+      for (var tableName in serverData) {
+        if (!ALL_DATA[tableName]) continue;
+        var svrRows = serverData[tableName].rows || [];
+        ALL_DATA[tableName].rows = svrRows;
+        ALL_DATA[tableName].headers = serverData[tableName].headers || ALL_DATA[tableName].headers;
+        ALL_DATA[tableName].row_count = svrRows.length;
+        ALL_DATA[tableName]._hash = JSON.stringify(svrRows);
+      }
+      if (ALL_DATA[currentTable]) renderTable();
+    }).finally(function() { _syncing = false; })
+    .catch(function(e) { _syncing = false; console.log('pullFreshData failed:', e); });
+  }
+
+  // 定时从服务器拉取最新数据（每 2 秒）
+  setInterval(function() { pullFromServer(); }, SYNC_INTERVAL);
+  // 页面关闭前同步一次当前表格
+  window.addEventListener('beforeunload', function() { pushCurrentTable(); });
+  // 切换回当前页面时立即拉一次最新数据
+  var _lastVisSync = 0;
+  var _lastVisibilitySync = 0;
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden && Date.now() - _lastVisibilitySync > 10000) {
+      _lastVisibilitySync = Date.now();
+      pullFromServer();  // 改成查版本号（轻量），不拉全量
+    }
+  });
+
+  function getRecent() {
+    try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch(e) { return []; }
+  }
+  function addRecent(name) {
+    var r = getRecent().filter(function(x){ return x !== name; });
+    r.unshift(name);
+    if (r.length > RECENT_MAX) r = r.slice(0, RECENT_MAX);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(r));
+    renderSidebar();
+  }
+  function showToast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(function(){ t.classList.remove('show'); }, 2200);
+  }
+  function showError(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = '⚠ ' + msg; t.classList.add('show'); t.style.background = '#dc2626';
+    setTimeout(function(){ t.classList.remove('show'); t.style.background = ''; }, 3500);
+  }
+  // 检查编号是否重复（当前表格内）
+  function findDuplicateBianhao(newBianhao, excludeIdx) {
+    newBianhao = String(newBianhao || '').trim();
+    if (!newBianhao) return -1;
+    var rs = rows();
+    for (var i = 0; i < rs.length; i++) {
+      if (i === excludeIdx) continue;
+      if (String(rs[i]['编号'] || '').trim() === newBianhao) return i;
+    }
+    return -1;
+  }
+  function headers(name) {
+    name = name || currentTable;
+    return (ALL_DATA[name] && ALL_DATA[name].headers) || [];
+  }
+  function rows(name) {
+    name = name || currentTable;
+    return (ALL_DATA[name] && ALL_DATA[name].rows) || [];
+  }
+
+  // ===== Table View =====
+  // 选择模式切换
+  var _selectionMode = false;
+  function toggleSelectionMode() {
+    _selectionMode = !_selectionMode;
+    var btn = document.getElementById('selectModeBtn');
+    if (_selectionMode) {
+      document.body.classList.add('selection-mode');
+      if (btn) { btn.classList.add('active'); btn.innerHTML = '☑ 退出选择'; }
+    } else {
+      document.body.classList.remove('selection-mode');
+      if (btn) { btn.classList.remove('active'); btn.innerHTML = '☑ 选择'; }
+      // 退出选择模式时清除所有选中
+      if (selectedRows.size > 0) {
+        selectedRows.clear();
+        renderTable();
+      }
+    }
+    updateBatchBar();
+  }
+
+  function updateSelectAllCheckbox() {
+    var cbAll = document.querySelector(".table-wrap table thead .cb-col input[type=checkbox]");
+    var dAll = getFiltered();
+    if (cbAll) {
+      cbAll.checked = dAll.length > 0 && dAll.every(function(r){ return selectedRows.has(r._idx); });
+      cbAll.indeterminate = dAll.length > 0 && dAll.some(function(r){ return selectedRows.has(r._idx); }) && !cbAll.checked;
+    }
+    updateBatchBar();
+  }
+
+  function updateBatchBar() {
+    var toolbar = document.getElementById('batchToolbar');
+    if (!toolbar) return;
+    // 只在选择模式下显示工具栏
+    if (!_selectionMode) {
+      toolbar.classList.remove('has-selection');
+      toolbar.style.display = 'none';
+      return;
+    }
+    var count = selectedRows.size;
+    var countNumEl = document.getElementById('batchCountNum');
+    if (countNumEl) countNumEl.textContent = count;
+    var hintEl = document.getElementById('batchHint');
+    if (count > 0) {
+      toolbar.classList.add('has-selection');
+      toolbar.style.display = 'flex';
+      if (hintEl) hintEl.style.display = 'none';
+    } else {
+      toolbar.classList.remove('has-selection');
+      toolbar.style.display = 'none';
+      if (hintEl) hintEl.style.display = '';
+    }
+    var cbBatch = document.getElementById('batchSelectAll');
+    if (cbBatch) {
+      var dAll = getFiltered();
+      cbBatch.checked = dAll.length > 0 && dAll.every(function(r){ return selectedRows.has(r._idx); });
+      cbBatch.indeterminate = dAll.length > 0 && dAll.some(function(r){ return selectedRows.has(r._idx); }) && !cbBatch.checked;
+    }
+  }
+
+  function batchCloseToolbar() {
+    selectedRows.clear();
+    renderTable();
+    var toolbar = document.getElementById('batchToolbar');
+    if (toolbar) {
+      toolbar.classList.remove('has-selection');
+      toolbar.style.display = 'none';
+    }
+  }
+
+  function batchToggleSelectAll() {
+    var cbBatch = document.getElementById('batchSelectAll');
+    var dAll = getFiltered();
+    if (cbBatch.indeterminate) {
+      dAll.forEach(function(r){ selectedRows.delete(r._idx); });
+      cbBatch.checked = false;
+      cbBatch.indeterminate = false;
+    } else if (cbBatch.checked) {
+      dAll.forEach(function(r){ selectedRows.add(r._idx); });
+    } else {
+      dAll.forEach(function(r){ selectedRows.delete(r._idx); });
+    }
+    renderTable();
+  }
+
+  function getFiltered() {
+    var d = rows().slice().map(function(r, i){ r._idx = i; return r; });
+    if (searchTerm) {
+      var t = searchTerm.toLowerCase(), hs = headers();
+      d = d.filter(function(r){ return hs.some(function(c){ return (r[c]||'').toLowerCase().indexOf(t)!==-1; }); });
+    }
+    if (currentSort.col >= 0) {
+      var cn = headers()[currentSort.col];
+      d.sort(function(a,b){
+        var va=a[cn]||'', vb=b[cn]||'';
+        var na=parseFloat(va), nb=parseFloat(vb);
+        if(!isNaN(na) && !isNaN(nb)) return currentSort.asc ? na-nb : nb-na;
+        return currentSort.asc ? String(va).localeCompare(String(vb),'zh-CN') : String(vb).localeCompare(String(va),'zh-CN');
+      });
+    }
+    return d;
+  }
+
+  function getIcon(name) {
+    var map = {
+      '销售表':'🛒','采购成本表':'💰','收款表':'💳','费用表':'🧾','利润表':'📈',
+      '承包确认单':'📝','客户统计表':'👥','每日流水':'📅','平台结算折扣率':'🏷️'
+    };
+    return map[name] || '📋';
+  }
+
+  function mkTableItem(name, count, isFirstRecent) {
+    var div = document.createElement('div');
+    div.className = 'table-item';
+    div.innerHTML = '<span class="table-icon">'+getIcon(name)+'</span><span class="table-name">'+name+'</span><span class="table-badge">'+count+'</span>';
+    if (isFirstRecent) {
+      var dot = document.createElement('span'); dot.className = 'pin-dot'; div.appendChild(dot);
+    }
+    div.addEventListener('click', function(e){
+      e.preventDefault();
+      window.open(window.location.pathname + '?table=' + encodeURIComponent(name), '_blank');
+    });
+    return div;
+  }
+
+  function renderSidebar() {
+    var recent = getRecent();
+    var recentList = document.getElementById('recentList');
+    recentList.innerHTML = '';
+    if (recent.length) {
+      recent.forEach(function(name, i){
+        if (!ALL_DATA[name]) return;
+        var item = mkTableItem(name, ALL_DATA[name].rows.length, i===0);
+        if (currentView === 'table' && name === currentTable) item.classList.add('active');
+        recentList.appendChild(item);
+      });
+      document.getElementById('recentSection').style.display = '';
+    } else {
+      document.getElementById('recentSection').style.display = 'none';
+    }
+
+    var allList = document.getElementById('allTableList');
+    var moreList = document.getElementById('moreTableList');
+    var moreToggle = document.getElementById('moreToggle');
+    allList.innerHTML = ''; moreList.innerHTML = '';
+
+    var visible = tableNames.filter(function(n){ return ALL_DATA[n]; });
+    var firstPart = visible.slice(0, VISIBLE_COUNT);
+    var restPart = visible.slice(VISIBLE_COUNT);
+
+    firstPart.forEach(function(name){
+      var item = mkTableItem(name, ALL_DATA[name].rows.length, false);
+      if (currentView === 'table' && name === currentTable) item.classList.add('active');
+      allList.appendChild(item);
+    });
+
+    if (restPart.length) {
+      moreToggle.style.display = '';
+      moreList.className = 'sidebar-collapsed-section' + (moreToggle.classList.contains('collapsed') ? '' : ' show');
+      restPart.forEach(function(name){
+        var item = mkTableItem(name, ALL_DATA[name].rows.length, false);
+        if (currentView === 'table' && name === currentTable) item.classList.add('active');
+        moreList.appendChild(item);
+      });
+      moreToggle.innerHTML = '<span>更多表格 (' + restPart.length + ')</span><span class="arrow">▼</span>';
+    } else {
+      moreToggle.style.display = 'none';
+    }
+
+    document.getElementById('sidebarCount').textContent = visible.length + '张';
+
+    // Dashboard tab active state
+    var dt = document.getElementById('dashboardTab');
+    if (currentView === 'dashboard') dt.classList.add('active');
+    else dt.classList.remove('active');
+  }
+  function switchToTable(name) {
+    currentView = 'table';
+    currentTable = name;
+    searchTerm = '';
+    document.getElementById('searchInput').value = '';
+    currentSort = { col: -1, asc: true };
+    selectedRows.clear();
+    document.getElementById('activeTableName').textContent = name;
+    document.getElementById('activeTableInfo').textContent = (ALL_DATA[name].rows.length || 0) + ' 条';
+
+    document.getElementById('tableView').classList.remove('hidden');
+    document.getElementById('tableView').style.display = '';
+    document.getElementById('dashboardView').classList.remove('active');
+    document.getElementById('dashboardView').style.display = 'none';
+
+    // Show table topbar, hide dashboard toolbar
+    document.getElementById('tableView').querySelector('.topbar').style.display = '';
+
+    renderSidebar();
+    renderTable();
+    addRecent(name);
+
+    // Destroy all chart instances to save memory
+    destroyAllCharts();
+  }
+
+  function switchToDashboard() {
+    currentView = 'dashboard';
+
+    document.getElementById('tableView').style.display = 'none';
+    document.getElementById('tableView').classList.add('hidden');
+    document.getElementById('dashboardView').style.display = '';
+    document.getElementById('dashboardView').classList.add('active');
+
+    renderSidebar();
+    loadChartConfigs();
+    updateColumnSelectors();
+    renderKPIs();
+    renderAllCharts();
+  }
+
+  // ===== Column Width Helper =====
+  function getColWidthClass(colName) {
+    var xwide = ['备注','物流信息','费用明细','发货地址','收货地址'];
+    var wide  = ['商品名称','供应商名称','收料单位','供货商名称','实际采购品牌'];
+    var xs    = ['编号'];
+    var narrow = ['订单编号','订单日期','单品编码','数量','单位','单价（含税）','不含税单价','税率','含税单价','折扣率','服务费','服务费金额','开票金额','应收金额','实收金额','成本小计（含税）','毛利','税额','净收入','回款金额','回款日期','报销日期','报销人','审批人','下单人职务','下单人电话','收货人联系方式','客户分级','日期','支出','收入','银行余额','利润','业绩归属','联系人','联系电话'];
+    if (xwide.indexOf(colName) !== -1) return 'col-xwide';
+    if (wide.indexOf(colName) !== -1) return 'col-wide';
+    if (xs.indexOf(colName) !== -1) return 'col-xs';
+    if (narrow.indexOf(colName) !== -1) return 'col-narrow';
+    return 'col-medium';
+  }
+
+  // ===== 日期格式化：6位数字 YYMMDD -> 可读日期 =====
+  function formatDateYYMMDD(val) {
+    if (!val || typeof val !== 'string') return val;
+    // 匹配纯6位数字
+    var m = val.match(/^(\d{2})(\d{2})(\d{2})$/);
+    if (!m) return val;
+    var yy = parseInt(m[1], 10);
+    var year = 2000 + yy;
+    var month = parseInt(m[2], 10);
+    var day = parseInt(m[3], 10);
+    // 基本合法性检查
+    if (month < 1 || month > 12 || day < 1 || day > 31) return val;
+    return year + '.' + month + '.' + day;
+  }
+
+  // ===== Table Rendering =====
+  function renderTable() {
+    var headRow = document.getElementById('tableHeadRow'); headRow.innerHTML = '';
+    var hs = headers();
+    // 全选 checkbox
+    var thCb = document.createElement('th'); thCb.className = 'cb-col';
+    var cbAll = document.createElement('input'); cbAll.type = 'checkbox';
+    cbAll.title = '全选/取消全选';
+    var dAll = getFiltered();
+    cbAll.checked = dAll.length > 0 && dAll.every(function(r){ return selectedRows.has(r._idx); });
+    cbAll.indeterminate = dAll.length > 0 && dAll.some(function(r){ return selectedRows.has(r._idx); }) && !cbAll.checked;
+    cbAll.checkAll = function(e){
+      e.stopPropagation();
+      if (cbAll.checked) {
+        cbAll.indeterminate = false;
+        dAll.forEach(function(r){ selectedRows.add(r._idx); });
+      } else {
+        cbAll.indeterminate = false;
+        dAll.forEach(function(r){ selectedRows.delete(r._idx); });
+      }
+      var tbody = document.querySelector(".table-wrap table tbody");
+      if (tbody) {
+        tbody.querySelectorAll("tr").forEach(function(r){
+          var cb = r.querySelector('input[type=checkbox]');
+          if (cbAll.checked) { r.classList.add("selected"); if (cb) cb.checked = true; }
+          else { r.classList.remove("selected"); if (cb) cb.checked = false; }
+        });
+      }
+      updateBatchBar();
+    };
+    cbAll.addEventListener('click', cbAll.checkAll);
+    thCb.appendChild(cbAll); headRow.appendChild(thCb);
+    // 数据列
+    hs.forEach(function(c, i){
+      var th = document.createElement('th');
+      th.dataset.col = i;
+      th.className = getColWidthClass(c);
+      if (currentSort.col === i) th.classList.add('sorted');
+      th.innerHTML = c + ' <span class="sort-arrow">' + (currentSort.col===i ? (currentSort.asc?'▲':'▼') : '⇅') + '</span>';
+      th.addEventListener('click', function(){ sortBy(parseInt(this.dataset.col)); });
+      headRow.appendChild(th);
+    });
+    var tha = document.createElement('th'); tha.textContent = '操作'; headRow.appendChild(tha);
+
+    var tbody = document.getElementById('tableBody'); tbody.innerHTML = '';
+    var d = getFiltered();
+    if (!d.length) {
+      tbody.innerHTML = '<tr><td colspan="'+(hs.length+2)+'"><div class="empty-state"><div class="icon">📭</div><p>没有匹配数据</p></div></td></tr>';
+    }
+    d.forEach(function(r){
+      var origIdx = r._idx;
+      var tr = document.createElement('tr');
+      tr.dataset.idx = origIdx;
+      if (selectedRows.has(origIdx)) tr.classList.add('selected');
+      // 复选框列
+      var tdCb = document.createElement('td'); tdCb.className = 'cb-col';
+      var cbRow = document.createElement('input'); cbRow.type = 'checkbox';
+      cbRow.checked = selectedRows.has(origIdx);
+      cbRow.addEventListener('change', function(e){
+        e.stopPropagation();
+        if (this.checked) {
+          selectedRows.add(origIdx);
+          tr.classList.add("selected");
+        } else {
+          selectedRows.delete(origIdx);
+          tr.classList.remove("selected");
+        }
+        updateSelectAllCheckbox();
+        updateBatchBar();
+      });
+      // 右键点击行取消选中
+      tr.addEventListener('contextmenu', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        if (selectedRows.has(origIdx)) {
+          selectedRows.delete(origIdx);
+          tr.classList.remove("selected");
+          cbRow.checked = false;
+          updateSelectAllCheckbox();
+        }
+      });
+      tdCb.appendChild(cbRow); tr.appendChild(tdCb);
+
+      hs.forEach(function(c){
+        var td = document.createElement('td');
+        td.className = getColWidthClass(c);
+        var v = r[c]||'';
+        var displayVal = v;
+        // 日期列：将6位数字转为可读日期
+        if (c.indexOf('日期') >= 0) { displayVal = normalizeDate(v); td.classList.add('date-col'); }
+        var isNum = v !== '' && !isNaN(parseFloat(v)) && isFinite(v);
+        if (isNum) td.classList.add('num-col');
+        var inp = document.createElement('input');
+        inp.type = 'text';
+        inp.value = displayVal;
+        inp.readOnly = true;
+        inp.title = v;
+        td.appendChild(inp);
+        // 编号字段重复标记
+        if (c === '编号' && v) {
+          var dupIdx = findDuplicateBianhao(v, origIdx);
+          if (dupIdx !== -1) {
+            inp.style.color = '#dc2626';
+            inp.style.fontWeight = 'bold';
+          }
+        }
+        tr.appendChild(td);
+      });
+      var tda = document.createElement('td'); tda.className = 'act-col';
+      var editBtn = document.createElement('button');
+      editBtn.textContent = '修改';
+      // styled via CSS class .table-wrap td.act-col button
+      editBtn.addEventListener('click', function(e){ e.stopPropagation(); editRow(origIdx); });
+      tda.appendChild(editBtn); tr.appendChild(tda);
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('shownCount').textContent = d.length;
+    document.getElementById('totalCount').textContent = rows().length;
+    // 同步顶部"销售表 N 条"的总条数（pullFromServer 拉取后不会经过 switchToTable）
+    var infoEl = document.getElementById('activeTableInfo');
+    if (infoEl) infoEl.textContent = (rows().length || 0) + ' 条';
+
+    // 小计：只合计"订单小计（含税）"列
+    var tfoot = document.getElementById('tableFoot'); tfoot.innerHTML = '';
+    var subtotalIdx = -1;
+    for (var i = 0; i < hs.length; i++) { if (hs[i] === '订单小计（含税）') { subtotalIdx = i; break; } }
+    if (subtotalIdx >= 0) {
+      var subtotal = 0;
+      d.forEach(function(r){ var v = parseFloat(r[hs[subtotalIdx]]); if (!isNaN(v)) subtotal += v; });
+      var trFoot = document.createElement('tr');
+      // 复选框占位
+      var tdCbFoot = document.createElement('td'); trFoot.appendChild(tdCbFoot);
+      for (var j = 0; j < hs.length; j++) {
+        var tdFoot = document.createElement('td');
+        if (j === subtotalIdx) {
+          tdFoot.textContent = subtotal.toLocaleString('zh-CN', {minimumFractionDigits:2,maximumFractionDigits:2});
+          tdFoot.className = 'num-col';
+          tdFoot.style.textAlign = 'right';
+        }
+        trFoot.appendChild(tdFoot);
+      }
+      // 操作列占位
+      var tdActFoot = document.createElement('td'); trFoot.appendChild(tdActFoot);
+      tfoot.appendChild(trFoot);
+    }
+    document.getElementById('sumStats').textContent = '';
+  }
+
+  function sortBy(col) {
+    if (currentSort.col === col) currentSort.asc = !currentSort.asc;
+    else { currentSort.col = col; currentSort.asc = true; }
+    renderTable();
+  }
+
+  function editRow(idx) {
+    window.open('add_record.html?table=' + encodeURIComponent(currentTable) + '&edit=' + idx, '_blank');
+  }
+  function deleteRow(idx) {
+    if (!confirm('确定删除这条记录？')) return;
+    rows().splice(idx, 1);
+    selectedRows.delete(idx);
+    saveData(); renderTable(); showToast('已删除');
+    pushCurrentTable();
+  }
+
+  function deleteSelected() {
+    if (!selectedRows.size) { showToast('请先勾选要删除的行'); return; }
+    if (!confirm('确定删除选中的 '+selectedRows.size+' 条记录？')) return;
+    var arr = Array.from(selectedRows).sort(function(a,b){ return b-a; });
+    var r = rows();
+    var bianhaos = arr.map(function(i){ return r[i]['编号'] || ''; }).filter(function(b){ return b; });
+    if (bianhaos.length === 0) { showToast('没有有效的编号可删除'); return; }
+    showToast('正在删除...');
+    fetch(SERVER_SYNC_URL+'/'+encodeURIComponent(currentTable)+'/rows/delete', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({bianhaos: bianhaos})
+    }).then(function(resp){
+      if (!resp.ok) throw new Error('server error');
+      return resp.json();
+    }).then(function(result){
+      arr.forEach(function(i){ r.splice(i,1); });
+      selectedRows.clear();
+      ALL_DATA[currentTable].row_count = r.length;
+      saveData(); renderTable();
+      showToast('已删除 ' + result.deleted + ' 条');
+      _tableVersions[currentTable] = (_tableVersions[currentTable] || 0) + 1;
+      var toolbar = document.getElementById('batchToolbar');
+      if (toolbar) { toolbar.classList.remove('has-selection'); toolbar.style.display = 'none'; }
+    }).catch(function(e){ showToast('删除失败: ' + e.message); console.error(e); });
+  }
+
+  // ===== Excel 批量导入 =====
+  function importExcel() {
+    // 打开文件上传弹窗
+    openUploadModal();
+  }
+
+  function handleImportFile(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    if (!file.name.match(/\.xlsx?$/i)) { showToast('请选择 .xlsx 或 .xls 文件'); return; }
+    showToast('正在解析文件...');
+    var formData = new FormData();
+    formData.append('file', file);
+    fetch('/api/tables/' + encodeURIComponent(currentTable) + '/import', {
+      method: 'POST',
+      body: formData
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res.success) {
+        showToast('成功导入 ' + res.inserted + ' 条记录');
+        // 用服务端返回的全量数据替换本地数据（编号已自动递增）
+        if (res.rows) {
+          var tbl = ALL_DATA[currentTable];
+          tbl.rows = res.rows.map(function(r, i) {
+            var nr = {};
+            tbl.headers.forEach(function(h) { nr[h] = r[h] !== undefined ? r[h] : ''; });
+            nr._idx = i;
+            return nr;
+          });
+        }
+        saveData(); renderTable(); renderSidebar();
+      } else {
+        showToast('导入失败: ' + (res.error || '未知错误'));
+      }
+    })
+    .catch(function(err) { showToast('导入失败: ' + err.message); })
+    .finally(function() { e.target.value = ''; });
+  }
+
+  function exportToExcel() {
+    var hs = headers();
+    var hadSelection = selectedRows.size > 0;
+    var source = hadSelection
+      ? getFiltered().filter(function(r){ return selectedRows.has(r._idx); })
+      : getFiltered();
+    if (!source.length) { showToast('没有数据可导出'); return; }
+    var data = [hs];
+    source.forEach(function(r){
+      data.push(hs.map(function(c){ return r[c] || ''; }));
+    });
+    if (typeof XLSX === 'undefined') {
+      showToast('Excel 库加载失败，正在用 CSV 导出...');
+      var csv = '\uFEFF' + hs.join(',') + '\n';
+      source.forEach(function(r){
+        csv += hs.map(function(c){ return '"'+(r[c]||'').replace(/"/g,'""')+'"'; }).join(',') + '\n';
+      });
+      var blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = currentTable+'_'+new Date().toISOString().slice(0,10)+'.csv';
+      a.click(); URL.revokeObjectURL(a.href);
+      showToast('已导出 ' + source.length + ' 条记录为 CSV');
+      if (hadSelection) {
+        selectedRows.clear(); renderTable();
+        var tb = document.getElementById('batchToolbar');
+        if (tb) { tb.classList.remove('has-selection'); tb.style.display = 'none'; }
+      }
+      return;
+    }
+    var wb = XLSX.utils.book_new();
+    var ws = XLSX.utils.aoa_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, currentTable);
+    XLSX.writeFile(wb, currentTable + '_' + new Date().toISOString().slice(0,10) + '.xlsx');
+    showToast('已导出 ' + source.length + ' 条记录为 Excel');
+    if (hadSelection) {
+      selectedRows.clear(); renderTable();
+      var tb = document.getElementById('batchToolbar');
+      if (tb) { tb.classList.remove('has-selection'); tb.style.display = 'none'; }
+    }
+  }
+
+  // ===== Dashboard =====
+  function getSourceData(sourceName) {
+    var tbl = ALL_DATA[sourceName];
+    if (!tbl) return { headers: [], rows: [] };
+    return { headers: tbl.headers, rows: tbl.rows };
+  }
+
+  function detectNumericCols(sourceName) {
+    var info = getSourceData(sourceName);
+    var nums = [];
+    info.headers.forEach(function(h){
+      var allNum = true, hasVal = false;
+      info.rows.forEach(function(r){
+        var v = r[h];
+        if (v !== '' && v !== null && v !== undefined) {
+          hasVal = true;
+          if (isNaN(parseFloat(v)) || !isFinite(v)) allNum = false;
+        }
+      });
+      if (hasVal && allNum) nums.push(h);
+    });
+    return nums;
+  }
+
+  function detectLabelCols(sourceName) {
+    var info = getSourceData(sourceName);
+    var labels = [];
+    info.headers.forEach(function(h){
+      var uniqueVals = {}, totalVals = 0;
+      info.rows.forEach(function(r){
+        var v = r[h];
+        if (v !== '' && v !== null && v !== undefined) {
+          totalVals++;
+          uniqueVals[v] = true;
+        }
+      });
+      var uniqueCount = Object.keys(uniqueVals).length;
+      // Good label columns have reasonable uniqueness (not all unique, not all same)
+      if (totalVals > 0 && uniqueCount >= 1 && uniqueCount <= 20 && uniqueCount === totalVals) {
+        labels.push(h);
+      } else if (totalVals > 0 && uniqueCount > 1 && uniqueCount <= 30) {
+        labels.push(h);
+      }
+    });
+    // Prioritize common label columns
+    var priority = ['收料单位','供应商名称','商品名称','品牌','单位','分类','采购单编号'];
+    labels.sort(function(a,b){
+      var ai = priority.indexOf(a), bi = priority.indexOf(b);
+      if (ai >= 0 && bi >= 0) return ai - bi;
+      if (ai >= 0) return -1;
+      if (bi >= 0) return 1;
+      return 0;
+    });
+    return labels;
+  }
+
+  function updateColumnSelectors() {
+    var sourceName = document.getElementById('dbDataSource').value;
+    var labelCols = detectLabelCols(sourceName);
+    var numCols = detectNumericCols(sourceName);
+
+    var labelSel = document.getElementById('dbLabelCol');
+    var valueSel = document.getElementById('dbValueCol');
+
+    labelSel.innerHTML = '<option value="">-- 自动选择 --</option>';
+    labelCols.forEach(function(c){
+      labelSel.innerHTML += '<option value="'+c+'">'+c+'</option>';
+    });
+    // Auto-select first label
+    if (labelCols.length > 0) labelSel.value = labelCols[0];
+
+    valueSel.innerHTML = '<option value="">-- 自动选择 --</option>';
+    numCols.forEach(function(c){
+      valueSel.innerHTML += '<option value="'+c+'">'+c+'</option>';
+    });
+    // Auto-select first value
+    if (numCols.length > 0) valueSel.value = numCols[0];
+  }
+
+  function saveChartConfigs() {
+    localStorage.setItem(DASHBOARD_KEY, JSON.stringify(chartConfigs));
+  }
+
+  function loadChartConfigs() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(DASHBOARD_KEY)) || [];
+      if (saved.length) {
+        chartConfigs = saved;
+      } else {
+        // Default: one chart for 销售表
+        chartConfigs = [{
+          id: 'chart_' + Date.now(),
+          source: '销售表',
+          chartType: 'bar',
+          labelCol: '收料单位',
+          valueCol: '合计（含税）',
+          title: '收料单位 - 合计金额'
+        }];
+        saveChartConfigs();
+      }
+    } catch(e) {
+      chartConfigs = [];
+    }
+  }
+
+  function addChartConfig() {
+    var sourceName = document.getElementById('dbDataSource').value;
+    var chartType = document.getElementById('dbChartTypeGlobal').value;
+    var labelCol = document.getElementById('dbLabelCol').value;
+    var valueCol = document.getElementById('dbValueCol').value;
+
+    if (labelCol === '') {
+      var labelCols = detectLabelCols(sourceName);
+      if (labelCols.length === 0) { showToast('该数据源没有合适的标签列'); return; }
+      labelCol = labelCols[0];
+    }
+    if (valueCol === '') {
+      var numCols = detectNumericCols(sourceName);
+      if (numCols.length === 0) { showToast('该数据源没有数值列'); return; }
+      valueCol = numCols[0];
+    }
+
+    chartConfigs.push({
+      id: 'chart_' + Date.now(),
+      source: sourceName,
+      chartType: chartType,
+      labelCol: labelCol,
+      valueCol: valueCol,
+      title: labelCol + ' - ' + valueCol
+    });
+    saveChartConfigs();
+    renderAllCharts();
+    showToast('图表已添加');
+  }
+
+  function removeChartConfig(chartId) {
+    chartConfigs = chartConfigs.filter(function(c){ return c.id !== chartId; });
+    if (chartInstances[chartId]) {
+      chartInstances[chartId].destroy();
+      delete chartInstances[chartId];
+    }
+    saveChartConfigs();
+    renderAllCharts();
+  }
+
+  function destroyAllCharts() {
+    for (var id in chartInstances) {
+      if (chartInstances[id]) chartInstances[id].destroy();
+    }
+    chartInstances = {};
+  }
+
+  function renderKPIs() {
+    var sourceName = document.getElementById('dbDataSource').value;
+    var info = getSourceData(sourceName);
+    var numCols = detectNumericCols(sourceName);
+    var kpiRow = document.getElementById('kpiRow');
+    kpiRow.innerHTML = '';
+
+    // Calculate KPIs
+    var totalSum = 0, maxVal = -Infinity, minVal = Infinity, rowCount = info.rows.length;
+
+    // Pick the best value column for KPIs
+    var bestCol = '';
+    var bestCols = ['合计（含税）','小计（含税）','利润','净收入','金额','数量','支出','收入','小计','费用'];
+    for (var i = 0; i < bestCols.length; i++) {
+      if (numCols.indexOf(bestCols[i]) >= 0) { bestCol = bestCols[i]; break; }
+    }
+    if (!bestCol && numCols.length > 0) bestCol = numCols[0];
+
+    info.rows.forEach(function(r){
+      var v = parseFloat(r[bestCol]);
+      if (!isNaN(v)) {
+        totalSum += v;
+        if (v > maxVal) maxVal = v;
+        if (v < minVal) minVal = v;
+      }
+    });
+
+    var avgVal = rowCount > 0 ? totalSum / rowCount : 0;
+
+    var kpis = [
+      { icon:'💰', label:'总和('+bestCol+')', value: totalSum.toLocaleString('zh-CN', {minimumFractionDigits:2,maximumFractionDigits:2}), sub: info.rows.length + ' 条数据', color:'#eef2ff', iconBg:'#6366f1' },
+      { icon:'📊', label:'平均值', value: avgVal.toLocaleString('zh-CN', {minimumFractionDigits:2,maximumFractionDigits:2}), sub: '每行平均', color:'#ecfdf5', iconBg:'#22c55e' },
+      { icon:'🔝', label:'最大值', value: (maxVal === -Infinity ? 0 : maxVal).toLocaleString('zh-CN', {minimumFractionDigits:2,maximumFractionDigits:2}), sub: '单笔最高', color:'#fffbeb', iconBg:'#f59e0b' },
+      { icon:'📉', label:'最小值', value: (minVal === Infinity ? 0 : minVal).toLocaleString('zh-CN', {minimumFractionDigits:2,maximumFractionDigits:2}), sub: '单笔最低', color:'#fef2f2', iconBg:'#ef4444' }
+    ];
+
+    kpis.forEach(function(kpi){
+      kpiRow.innerHTML += ''+
+        '<div class="db-kpi-card" style="background:'+kpi.color+'">'+
+          '<div class="db-kpi-icon" style="background:'+kpi.iconBg+'20;color:'+kpi.iconBg+'">'+kpi.icon+'</div>'+
+          '<div class="db-kpi-info">'+
+            '<div class="db-kpi-label">'+kpi.label+'</div>'+
+            '<div class="db-kpi-value">'+kpi.value+'</div>'+
+            '<div class="db-kpi-sub">'+kpi.sub+'</div>'+
+          '</div>'+
+        '</div>';
+    });
+  }
+
+  function renderAllCharts() {
+    var grid = document.getElementById('chartsGrid');
+    grid.innerHTML = '';
+
+    chartConfigs.forEach(function(config){
+      var panel = document.createElement('div');
+      panel.className = 'db-chart-panel';
+      panel.id = 'panel_' + config.id;
+      panel.innerHTML = ''+
+        '<div class="db-chart-header">'+
+          '<span class="db-chart-title">'+getIcon(config.source)+' '+config.title+'</span>'+
+          '<div class="db-chart-actions">'+
+            '<span style="font-size:11px;color:#94a3b8;margin-right:6px">'+getTypeName(config.chartType)+'</span>'+
+            '<button class="btn btn-sm" onclick="updateChartConfig(\''+config.id+'\')">✏️</button>'+
+            '<button class="btn btn-sm" style="color:#991b1b" onclick="removeChartConfig(\''+config.id+'\')">✕</button>'+
+          '</div>'+
+        '</div>'+
+        '<div class="db-chart-body"><canvas id="'+config.id+'"></canvas></div>';
+      grid.appendChild(panel);
+    });
+
+    // Add chart button
+    grid.innerHTML += ''+
+      '<div class="db-add-chart" id="addChartPlaceholder">'+
+        '<span class="plus">+</span><span>添加新图表</span>'+
+      '</div>';
+
+    // Bind events
+    document.getElementById('addChartPlaceholder').addEventListener('click', addChartConfig);
+
+    // Render all Chart.js charts
+    chartConfigs.forEach(function(config){
+      setTimeout(function(){ renderChart(config); }, 50);
+    });
+  }
+
+  function getTypeName(type) {
+    var map = {
+      'bar':'柱状图','horizontalBar':'横向柱状图','line':'折线图',
+      'pie':'饼图','doughnut':'环形图','radar':'雷达图',
+      'polarArea':'极地图','scatter':'散点图'
+    };
+    return map[type] || type;
+  }
+
+  // Colors
+  var PALETTE = [
+    '#6366f1','#22c55e','#f59e0b','#ef4444','#8b5cf6',
+    '#06b6d4','#ec4899','#14b8a6','#f97316','#3b82f6',
+    '#84cc16','#e11d48','#a855f7','#0ea5e9','#10b981'
+  ];
+
+  function renderChart(config) {
+    var canvas = document.getElementById(config.id);
+    if (!canvas) return;
+
+    // Destroy previous instance
+    if (chartInstances[config.id]) {
+      chartInstances[config.id].destroy();
+    }
+
+    var info = getSourceData(config.source);
+    var labels = [];
+    var dataValues = [];
+
+    // Aggregate data by label column
+    var aggregated = {};
+    info.rows.forEach(function(r){
+      var label = r[config.labelCol] || '(空)';
+      var val = parseFloat(r[config.valueCol]);
+      if (isNaN(val)) val = 0;
+      if (!aggregated[label]) aggregated[label] = 0;
+      aggregated[label] += val;
+    });
+
+    labels = Object.keys(aggregated);
+    dataValues = labels.map(function(l){ return aggregated[l]; });
+
+    if (labels.length === 0) return;
+
+    var ctx = canvas.getContext('2d');
+    var chartType = config.chartType;
+
+    // Chart.js doesn't have horizontalBar as a separate type in v4 - it's bar with indexAxis:'y'
+    var isHorizontal = (chartType === 'horizontalBar');
+    var actualType = isHorizontal ? 'bar' : chartType;
+
+    // For pie/doughnut/polarArea, use single dataset
+    // For bar/line/radar, use single dataset
+    var datasets = [{
+      label: config.valueCol,
+      data: dataValues,
+      backgroundColor: labels.map(function(_, i){ return PALETTE[i % PALETTE.length] + '99'; }),
+      borderColor: labels.map(function(_, i){ return PALETTE[i % PALETTE.length]; }),
+      borderWidth: 1,
+      borderRadius: actualType === 'bar' ? 6 : undefined,
+    }];
+
+    if (actualType === 'scatter') {
+      datasets = [{
+        label: config.valueCol,
+        data: labels.map(function(l, i){ return { x: i, y: dataValues[i] }; }),
+        backgroundColor: PALETTE[0] + '99',
+        borderColor: PALETTE[0],
+        pointRadius: 5,
+        pointHoverRadius: 8,
+      }];
+    }
+
+    try {
+      chartInstances[config.id] = new Chart(ctx, {
+        type: actualType,
+        data: { labels: labels, datasets: datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          indexAxis: isHorizontal ? 'y' : 'x',
+          plugins: {
+            legend: {
+              display: actualType !== 'pie' && actualType !== 'doughnut' && actualType !== 'polarArea',
+              position: 'top',
+              labels: { font: { size: 12 }, usePointStyle: true, padding: 16 }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(ctx){
+                  var val = ctx.raw;
+                  if (typeof val === 'object' && val !== null) val = val.y;
+                  return ctx.label + ': ' + (typeof val === 'number' ? val.toLocaleString('zh-CN') : val);
+                }
+              }
+            }
+          },
+          scales: (actualType === 'pie' || actualType === 'doughnut' || actualType === 'polarArea' || actualType === 'radar') ? {} : {
+            x: {
+              title: { display: !isHorizontal, text: isHorizontal ? config.valueCol : config.labelCol, font: { size: 12 } },
+              ticks: { font: { size: 11 }, callback: function(v){ return typeof v === 'number' && Math.abs(v)>=10000 ? (v/10000).toFixed(1)+'万' : v; } },
+              grid: { display: false }
+            },
+            y: {
+              title: { display: isHorizontal, text: isHorizontal ? config.labelCol : config.valueCol, font: { size: 12 } },
+              ticks: { font: { size: 11 }, callback: function(v){ return typeof v === 'number' && Math.abs(v)>=10000 ? (v/10000).toFixed(1)+'万' : v; } },
+              grid: { color: '#f1f5f9' }
+            }
+          }
+        }
+      });
+    } catch(e) {
+      console.error('Chart render error:', e);
+    }
+  }
+
+  // Expose functions to global scope for button onclick
+  window.updateChartConfig = function(chartId) {
+    var config = chartConfigs.find(function(c){ return c.id === chartId; });
+    if (!config) return;
+
+    // Populate config panel with current values
+    document.getElementById('dbDataSource').value = config.source;
+    updateColumnSelectors();
+    document.getElementById('dbChartTypeGlobal').value = config.chartType;
+
+    // Try to set label/value col (they may not be in the dropdown if source changed)
+    try { document.getElementById('dbLabelCol').value = config.labelCol; } catch(e) {}
+    try { document.getElementById('dbValueCol').value = config.valueCol; } catch(e) {}
+
+    // Remove old chart
+    chartConfigs = chartConfigs.filter(function(c){ return c.id !== chartId; });
+    if (chartInstances[chartId]) { chartInstances[chartId].destroy(); delete chartInstances[chartId]; }
+    saveChartConfigs();
+    renderAllCharts();
+
+    // Pre-select for adding new
+    showToast('已移除旧图表，请点击"添加图表"创建新的');
+  };
+
+  window.removeChartConfig = function(chartId) {
+    removeChartConfig(chartId);
+  };
+
+  // ===== Events =====
+  document.getElementById('batchSelectAll').addEventListener('change', batchToggleSelectAll);
+  document.getElementById('batchExportBtn').addEventListener('click', exportToExcel);
+  document.getElementById('batchDeleteBtn').addEventListener('click', deleteSelected);
+  document.getElementById('searchInput').addEventListener('input', function(){
+    searchTerm = this.value.trim(); renderTable();
+  });
+  document.getElementById('clearBtn').addEventListener('click', function(){
+    searchTerm = ''; document.getElementById('searchInput').value = ''; renderTable();
+  });
+  document.getElementById('exportBtn').addEventListener('click', exportToExcel);
+  document.getElementById('importBtn').addEventListener('click', openUploadModal);
+  document.getElementById('importFileInput').addEventListener('change', handleImportFile);
+
+  document.getElementById('recentToggle').addEventListener('click', function(){
+    this.classList.toggle('collapsed');
+    document.getElementById('recentList').classList.toggle('show');
+  });
+
+  document.getElementById('moreToggle').addEventListener('click', function(){
+    this.classList.toggle('collapsed');
+    document.getElementById('moreTableList').classList.toggle('show');
+  });
+
+  // Dashboard tab click
+  document.getElementById('dashboardTab').addEventListener('click', switchToDashboard);
+  // 关闭批量工具栏按钮
+  var closeBtn = document.getElementById('batchCloseBtn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', function(e){
+      e.stopPropagation();
+      batchCloseToolbar();
+    });
+  }
+  // 选择模式按钮
+  var selectModeBtn = document.getElementById('selectModeBtn');
+  if (selectModeBtn) {
+    selectModeBtn.addEventListener('click', function(){ toggleSelectionMode(); });
+  }
+  // 默认隐藏复选框列
+  document.body.classList.remove('selection-mode');
+  // 初始化批量工具栏状态
+  setTimeout(function(){ updateBatchBar(); }, 500);
+
+  // Dashboard config events
+  document.getElementById('dbDataSource').addEventListener('change', function(){
+    updateColumnSelectors();
+    renderKPIs();
+  });
+  document.getElementById('dbAddChartBtn').addEventListener('click', addChartConfig);
+  document.getElementById('dbClearAllBtn').addEventListener('click', function(){
+    if (!confirm('确定清空全部图表？')) return;
+    destroyAllCharts();
+    chartConfigs = [];
+    saveChartConfigs();
+    document.getElementById('chartsGrid').innerHTML = ''+
+      '<div class="db-add-chart" id="addChartPlaceholder">'+
+        '<span class="plus">+</span><span>添加新图表</span>'+
+      '</div>';
+    document.getElementById('addChartPlaceholder').addEventListener('click', addChartConfig);
+    showToast('已清空全部图表');
+  });
+
+  document.getElementById('formAddBtn').addEventListener('click', openFormAddPage);
+
+function openFormAddPage(){ if(!currentTable){ showToast('请先选择左侧表格'); return; } window.open('add_record.html?table='+encodeURIComponent(currentTable),'_blank'); }
+
+  // ===== 表单新增弹窗 =====
+  function openFormModal() {
+    if (!currentTable) { showToast('请先选择左侧表格'); return; }
+    var hdrs = headers(currentTable);
+    var allRows = rows(currentTable);
+    // 计算新编号
+    var maxNum = 0;
+    allRows.forEach(function(r) { var n = parseInt(r['编号'], 10); if (n > maxNum) maxNum = n; });
+    var newId = maxNum + 1;
+    document.getElementById('formModalTitle').textContent = '📝 表单新增 - ' + currentTable;
+    document.getElementById('formModalInfo').textContent = '表格: ' + currentTable + ' · 已有 ' + allRows.length + ' 条记录';
+    var html = '';
+    hdrs.forEach(function(hdr) {
+      if (hdr.indexOf('填表说明') === 0) {
+        html += '<div class="mf-fld" style="margin-top:12px;padding-top:10px;border-top:1px dashed #e5e7eb;">';
+        html += '<label style="font-size:11px;color:#9ca3af;font-weight:400;">' + hdr + '</label>';
+        html += '<input type="text" disabled>';
+        html += '</div>';
+        return;
+      }
+      html += '<div class="mf-fld"><label>' + hdr;
+      if (hdr === '编号') html += ' <span style="color:#ef4444">*</span>';
+      html += '</label>';
+      var dh = hdr.replace(/"/g, '&quot;');
+      var isDate = hdr.indexOf('日期') !== -1 || hdr.indexOf('月份') !== -1;
+      var isNum = false;
+      if (hdr !== '编号') {
+        var nls = ['数量','金额','单价','小计','成本','定金','尾款','税率','税额','费用','利润','收入','支出','余额','净收入','毛利','折扣率','服务费','开票金额','实收金额','回款金额','总利润','承包费','工资','补助','应得','借支'];
+        for (var j = 0; j < nls.length; j++) { if (hdr.indexOf(nls[j]) !== -1) { isNum = true; break; } }
+      }
+      var isTxt = hdr.indexOf('备注') !== -1 || hdr.indexOf('地址') !== -1 || hdr.indexOf('说明') !== -1 || hdr.indexOf('物流信息') !== -1;
+      if (hdr === '编号') {
+        html += '<input type="text" data-mfh="' + dh + '" value="' + newId + '" required>';
+      } else if (isDate) {
+        html += '<input type="date" data-mfh="' + dh + '">';
+      } else if (isNum) {
+        html += '<input type="number" step="0.01" data-mfh="' + dh + '">';
+      } else if (isTxt) {
+        html += '<textarea data-mfh="' + dh + '" rows="3"></textarea>';
+      } else {
+        html += '<input type="text" data-mfh="' + dh + '">';
+      }
+      html += '</div>';
+    });
+    document.getElementById('formModalBody').innerHTML = html;
+    document.getElementById('formModalStatus').className = 'mf-status';
+    document.getElementById('formAddModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeFormModal() {
+    document.getElementById('formAddModal').style.display = 'none';
+    document.body.style.overflow = '';
+    document.getElementById('formModalStatus').className = 'mf-status';
+  }
+
+  function submitFormModal() {
+    var btn = document.getElementById('formModalSubmitBtn');
+    btn.disabled = true;
+    var inputs = document.querySelectorAll('#formModalBody input:not([disabled]), #formModalBody textarea:not([disabled])');
+    var record = {};
+    inputs.forEach(function(inp) {
+      var hdr = inp.getAttribute('data-mfh');
+      if (hdr !== null) record[hdr] = inp.value.trim();
+    });
+    var id = record['编号'];
+    if (!id) { formModalStat('编号不能为空', 'err'); btn.disabled = false; return; }
+    var allRows = rows(currentTable);
+    for (var i = 0; i < allRows.length; i++) {
+      if (String(allRows[i]['编号'] || '').trim() === id) {
+        formModalStat('编号 "' + id + '" 已存在', 'err'); btn.disabled = false; return;
+      }
+    }
+    allRows.push(record);
+    saveData(); renderTable();
+    formModalStat('✅ 录入成功 · 编号: ' + id, 'ok');
+    showToast('已新增: ' + id);
+    formModalStat('⏳ 同步到服务器...', 'loading');
+    fetch('/api/tables/' + encodeURIComponent(currentTable) + '/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows: allRows })
+    }).then(function(r) { return r.json(); })
+      .then(function(result) {
+        if (result.success) formModalStat('✅ 录入成功 · 编号: ' + id + ' · 已同步', 'ok');
+      })
+      .catch(function() {
+        formModalStat('⚠ 网络异常，已存本地', 'err');
+      })
+      .finally(function() {
+        setTimeout(function() { closeFormModal(); }, 1300);
+        btn.disabled = false;
+      });
+  }
+
+  function formModalStat(msg, type) {
+    var el = document.getElementById('formModalStatus');
+    var txt = document.getElementById('formModalStatusTxt');
+    el.className = 'mf-status show ' + (type || 'ok');
+    txt.textContent = msg;
+  }
+
+  // FormModal 关闭方式
+  document.getElementById('formAddModal').addEventListener('click', function(e) {
+    if (e.target === this) closeFormModal();
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      if (document.getElementById('formAddModal').style.display === 'flex') closeFormModal();
+      if (document.getElementById('uploadModal').style.display === 'flex') closeUploadModal();
+    }
+  });
+
+  // ===== 文件上传弹窗 =====
+  var _uploadFile = null;
+  var _previewRows = null;
+  var _previewHeaders = null;
+
+  function openUploadModal() {
+    if (!currentTable) { showToast('请先选择左侧表格'); return; }
+    document.getElementById('uploadModalInfo').textContent = '当前表格: ' + currentTable + ' · 上传后数据将追加到已有记录中';
+    document.getElementById('uploadModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    clearUploadFile();
+    uploadSetStatus('');
+  }
+
+  function closeUploadModal() {
+    document.getElementById('uploadModal').style.display = 'none';
+    document.body.style.overflow = '';
+    clearUploadFile();
+  }
+
+  function uploadFileSelected(input) {
+    var file = input.files[0];
+    if (!file) return;
+    if (!file.name.match(/\.xlsx?$/i)) { uploadSetStatus('请选择 .xlsx 或 .xls 文件', 'err'); return; }
+    _uploadFile = file;
+    _previewRows = null;
+    _previewHeaders = null;
+    document.getElementById('uploadFileName').textContent = file.name;
+    document.getElementById('uploadFileSize').textContent = formatFileSize(file.size);
+    document.getElementById('uploadFileBadge').style.display = 'flex';
+    document.getElementById('uploadSubmitBtn').disabled = false;
+    uploadSetStatus('正在解析文件...', 'loading');
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        var data = new Uint8Array(e.target.result);
+        var workbook = XLSX.read(data, {type: 'array'});
+        var sheetName = workbook.SheetNames[0];
+        var sheet = workbook.Sheets[sheetName];
+        if (!sheet) { uploadSetStatus('无法读取工作表', 'err'); return; }
+        var json = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: ''});
+        if (!json || json.length < 2) { uploadSetStatus('文件内容不足（需要至少1行表头+1行数据）', 'err'); return; }
+        var headers = json[0];
+        var rowData = json.slice(1).filter(function(r) {
+          return r.some(function(c) { return String(c).trim() !== ''; });
+        });
+        _previewRows = rowData;
+        _previewHeaders = headers;
+        var thead = document.getElementById('uploadPreviewHead');
+        var tbody = document.getElementById('uploadPreviewBody');
+        thead.innerHTML = '<tr>' + headers.map(function(h) { return '<th>' + escHtml(String(h)) + '</th>'; }).join('') + '</tr>';
+        var maxShow = Math.min(rowData.length, 50);
+        tbody.innerHTML = rowData.slice(0, maxShow).map(function(r) {
+          return '<tr>' + r.map(function(c) { return '<td>' + escHtml(String(c)) + '</td>'; }).join('') + '</tr>';
+        }).join('');
+        if (rowData.length > maxShow) {
+          tbody.innerHTML += '<tr><td colspan="' + headers.length + '" style="text-align:center;color:#9ca3af;padding:8px">... 还有 ' + (rowData.length - maxShow) + ' 行未显示</td></tr>';
+        }
+        document.getElementById('uploadPreviewCount').textContent = '共 ' + rowData.length + ' 条 · ' + headers.length + ' 列';
+        document.getElementById('uploadPreviewSection').style.display = 'block';
+        uploadSetStatus('已解析 ' + rowData.length + ' 条记录，点击"导入数据"确认上传', 'ok');
+      } catch(err) {
+        uploadSetStatus('文件解析失败: ' + err.message, 'err');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function clearUploadFile() {
+    _uploadFile = null;
+    _previewRows = null;
+    _previewHeaders = null;
+    var fi = document.getElementById('uploadFileInput');
+    if (fi) fi.value = '';
+    document.getElementById('uploadFileBadge').style.display = 'none';
+    document.getElementById('uploadPreviewSection').style.display = 'none';
+    document.getElementById('uploadSubmitBtn').disabled = true;
+  }
+
+  function submitUpload() {
+    if (!_previewRows || !_previewRows.length) { uploadSetStatus('没有可导入的数据，请先选择文件', 'err'); return; }
+    var btn = document.getElementById('uploadSubmitBtn');
+    btn.disabled = true;
+    uploadSetStatus('正在上传并导入...', 'loading');
+    // 将数组行转换为对象格式（用表头作为key）
+    var headers = _previewHeaders;
+    var rows = _previewRows.map(function(row) {
+      var obj = {};
+      headers.forEach(function(h, i) { obj[h] = row[i] !== undefined ? row[i] : ''; });
+      return obj;
+    });
+    fetch('/api/tables/' + encodeURIComponent(currentTable) + '/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows: rows })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res.success || res.inserted !== undefined) {
+        var inserted = res.inserted || 0;
+        var skipped = res.skipped || 0;
+        var msg = '✅ 成功导入 ' + inserted + ' 条记录';
+        if (skipped > 0) msg += ' · 跳过 ' + skipped + ' 条重复';
+        uploadSetStatus(msg, 'ok');
+        showToast('导入成功: ' + inserted + ' 条');
+        // 重新加载数据
+        fetch('/api/tables/' + encodeURIComponent(currentTable))
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data && data.rows) {
+              ALL_DATA[currentTable].rows = data.rows;
+              ALL_DATA[currentTable].headers = data.headers || [];
+              ALL_DATA[currentTable].row_count = data.rows.length;
+              saveData(); renderTable();
+            }
+            setTimeout(function() { closeUploadModal(); }, 1500);
+          })
+          .catch(function() { renderTable(); setTimeout(function() { closeUploadModal(); }, 1500); });
+      } else {
+        uploadSetStatus('导入失败: ' + (res.error || '未知错误'), 'err');
+        btn.disabled = false;
+      }
+    })
+    .catch(function(err) {
+      uploadSetStatus('网络错误: ' + err.message, 'err');
+      btn.disabled = false;
+    });
+  }
+
+  function uploadSetStatus(msg, type) {
+    var el = document.getElementById('uploadStatus');
+    var txt = document.getElementById('uploadStatusTxt');
+    if (!msg) { el.className = 'mf-status'; return; }
+    el.className = 'mf-status show ' + (type || 'ok');
+    txt.textContent = msg;
+  }
+
+  function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(2) + ' MB';
+  }
+
+  function escHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // UploadModal 点遮罩关闭
+  document.getElementById('uploadModal').addEventListener('click', function(e) {
+    if (e.target === this) closeUploadModal();
+  });
+
+  // 拖拽上传
+  (function() {
+    var dz = document.getElementById('uploadDropzone');
+    if (!dz) return;
+    dz.addEventListener('dragover', function(e) { e.preventDefault(); e.stopPropagation(); this.classList.add('drag-over'); });
+    dz.addEventListener('dragleave', function(e) { e.preventDefault(); e.stopPropagation(); this.classList.remove('drag-over'); });
+    dz.addEventListener('drop', function(e) {
+      e.preventDefault(); e.stopPropagation();
+      this.classList.remove('drag-over');
+      var files = e.dataTransfer.files;
+      if (files.length > 0) {
+        document.getElementById('uploadFileInput').files = files;
+        uploadFileSelected(document.getElementById('uploadFileInput'));
+      }
+    });
+  })();
+
+  // Init
+    // ===== 多浏览器同步：每5秒自动拉取最新数据 =====
+  setInterval(function(){
+    if (!document.hidden && currentTable) pullFromServer();
+  }, 5000);
+
+  loadData();
+  renderSidebar();
+  // Check URL params: ?table=XXX to auto-load a specific table
+  var urlParams = new URLSearchParams(window.location.search);
+  var tableFromUrl = urlParams.get('table');
+  if (tableFromUrl && ALL_DATA[tableFromUrl]) {
+    switchToTable(tableFromUrl);
+  } else {
+    switchToTable('销售表');
+  }
+  // 导出全局函数供 onclick 使用
+  window.closeFormModal = closeFormModal;
+  window.submitFormModal = submitFormModal;
+  window.closeUploadModal = closeUploadModal;
+  window.submitUpload = submitUpload;
+  window.clearUploadFile = clearUploadFile;
+  window.uploadFileSelected = uploadFileSelected;
+  window.updateChartConfig = updateChartConfig;
+  window.removeChartConfig = removeChartConfig;
+})();
+</script>
+
+<script>
+  // ===== 数据导出/导入 =====
+  function exportAllData() {
+    var exportObj = {};
+    for (var name in ALL_DATA) {
+      if (ALL_DATA[name]) {
+        exportObj[name] = { headers: ALL_DATA[name].headers, rows: ALL_DATA[name].rows };
+      }
+    }
+    var blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'buyuan_data_backup_' + new Date().toISOString().slice(0,10) + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('数据已导出');
+  }
+
+  function importAllData(input) {
+    var file = input.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        var imported = JSON.parse(e.target.result);
+        var count = 0;
+        for (var name in imported) {
+          if (ALL_DATA[name] && imported[name]) {
+            ALL_DATA[name].rows = imported[name].rows || [];
+            ALL_DATA[name].row_count = ALL_DATA[name].rows.length;
+            count += ALL_DATA[name].row_count;
+          }
+        }
+        saveData();
+        pushAllTables();
+        if (currentTable) switchToTable(currentTable);
+        renderSidebar();
+        showToast('已导入 ' + count + ' 条数据');
+      } catch(err) {
+        showError('导入失败：文件格式错误');
+      }
+    };
+    reader.readAsText(file);
+    input.value = '';
+  }
+
+</script>
+</body>
+</html>

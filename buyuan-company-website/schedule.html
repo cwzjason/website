@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>日程管理 - 埠勤商贸</title>
+  <link rel="stylesheet" href="/assets/css/schedule-v2.css?v=20260807e">
+  <style>
+    :root { --cal-blue:#1a73e8; --text:#202124; --text-secondary:#5f6368; --text-muted:#80868b; --border:#dadce0; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:#f1f3f4; color:var(--text); }
+    .navbar { position:fixed; top:0; left:0; right:0; height:56px; background:#fff; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 24px; z-index:1000; }
+    .navbar-logo { display:flex; align-items:center; gap:10px; text-decoration:none; }
+    .plane-icon { width:32px; height:32px; flex-shrink:0; }
+    .logo-text { font-size:18px; font-weight:600; color:#1e3a8a; }
+    .nav-links { display:flex; list-style:none; gap:28px; align-items:center; }
+    .nav-links a { text-decoration:none; color:var(--text-secondary); font-size:14px; }
+    .nav-links a:hover { color:var(--cal-blue); }
+    .nav-links a.active { color:var(--cal-blue); font-weight:500; }
+    .nav-user { font-size:13px; color:var(--text-muted); margin-left:8px; }
+    #tabBar { position:sticky; top:56px; z-index:50; display:flex; gap:8px; flex-wrap:wrap; padding:14px 24px 0; background:#fff; border-bottom:1px solid var(--border); }
+    #mainContent { padding:20px 24px 60px; max-width:1200px; margin:0 auto; }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a href="index.html" class="navbar-logo">
+      <svg class="plane-icon" viewBox="0 0 48 48" fill="none">
+        <path d="M24 4L8 36L20 30L24 44L28 30L40 36L24 4Z" fill="#1e3a8a"/>
+        <path d="M24 4L8 36L20 30L24 26L28 30L40 36L24 4Z" fill="#3b82f6"/>
+        <circle cx="24" cy="28" r="3" fill="#fff"/>
+        <rect x="22" y="14" width="4" height="14" rx="2" fill="#1e3a8a"/>
+      </svg>
+      <span class="logo-text">埠勤商贸</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="index.html">首页</a></li>
+      <li><a href="about.html">关于我们</a></li>
+      <li><a href="products.html">产品服务</a></li>
+      <li><a href="mall/index.html" target="_blank">埠勤商城</a></li>
+      <li><a href="schedule.html" class="active">日程管理</a></li>
+      <li><a href="https://qcncdkprniip.feishu.cn/app/JH6eb0yXDaPbRwsW8fpcA6p3n0z?pageId=pgeakzNKwKtIs7TK" target="_blank">经营仪表盘</a></li>
+      <span id="currentUser" class="nav-user"></span>
+    </ul>
+  </nav>
+
+  <div id="tabBar"></div>
+  <div id="mainContent"></div>
+  <div id="modalContainer"></div>
+  <div id="toastContainer"></div>
+
+  <script src="/assets/js/auth-guard.js?v=20260807e"></script>
+  <script src="/assets/js/schedule-calendar.js?v=20260807e"></script>
+  <script src="/assets/js/schedule-v2.js?v=20260807e"></script>
+</body>
+</html>

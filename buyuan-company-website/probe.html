@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset=utf-8><title>probe</title></head><body>
+<div id=out style="font:13px monospace;white-space:pre;padding:8px"></div>
+<nav class="navbar" id=n>NAV</nav>
+<div id=t>tabBar</div>
+<div id=m>mainContent</div>
+<script>
+addEventListener('load',()=>{
+  const dump=(s,el)=>{const r=el.getBoundingClientRect();out.textContent+=s+': top='+r.top+' bot='+r.bottom+' h='+r.height+'\n';};
+  dump('navbar',document.getElementById('n'));
+  dump('tabBar',document.getElementById('t'));
+  dump('mainContent',document.getElementById('m'));
+});
+</script>
+</body></html>
